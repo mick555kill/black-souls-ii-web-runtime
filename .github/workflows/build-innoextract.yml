@@ -32,7 +32,7 @@ jobs:
         working-directory: innoextract-wasm
         run: |
           . /emsdk/emsdk_env.sh || true
-          bash build.sh
+          bash build.sh || { tail -n 160 deps/boost.log || true; exit 1; }
       - name: Upload WebAssembly prototype
         if: success()
         uses: actions/upload-artifact@v4
