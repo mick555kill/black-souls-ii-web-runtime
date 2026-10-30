@@ -1,0 +1,48 @@
+name: Deploy VX Ace Web Runtime to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Prepare static runtime and Ruby WebAssembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp index.html style.css _site/
+          cp -R src vendor _site/
+          mkdir -p _site/tests
+          unzip -p black_souls_ii_web_v0_9_mkxp_title_boot.zip vxace_mkxp_boot_v0_9/vendor/ruby/ruby+stdlib.wasm > _site/vendor/ruby/ruby+stdlib.wasm
+          unzip -p black_souls_ii_web_v0_9_mkxp_title_boot.zip vxace_mkxp_boot_v0_9/tests/sample.rgss3a > _site/tests/sample.rgss3a
+          test -s _site/vendor/ruby/ruby+stdlib.wasm
+          test -s _site/tests/sample.rgss3a
+          touch _site/.nojekyll
+      - name: Upload web artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
