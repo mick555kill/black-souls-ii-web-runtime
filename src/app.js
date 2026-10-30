@@ -33,7 +33,14 @@
       const rtp=VX.inspectRTP(zip);
       const entry=zip.entries.find(e=>/(^|\/)Game\.rgss3a$/i.test(e.name));
       if(rtp.installer&&!rtp.usable&&!entry){
-        throw Error(`${file.name} เป็น ZIP ตัวติดตั้ง RTP ของ Windows (Setup.exe + Setup-1.bin) ไม่ใช่ ZIP ภาพ/เสียง เบราว์เซอร์ยังแตก Inno Setup ไม่ได้ — ติดตั้ง RTP บน Windows แล้ว ZIP โฟลเดอร์ Graphics/ + Audio/ จากที่ติดตั้งมาเลือกใหม่`);
+        const unpacked = await VX.RTPInnoImporter.unpack(zip, message => status(message));
+        const extracted = new VX.ZipSource(unpacked, file.name + ' (Inno Setup)');
+        extracted.kind = 'rtp';
+        if (!extracted.names().length) throw Error('RTP unpacked but no Graphics/ or Audio/ files were indexed');
+        sources.push(extracted);
+        const parsed = VX.inspectRTP(unpacked);
+        names.push('🗂️ RTP installer · ' + file.name + ' (' + parsed.graphics + ' ภาพ / ' + parsed.audio + ' เสียง)');
+        return;
       }
       if(mode==='rtp'&&!rtp.usable)throw Error(`${file.name}: ไม่พบโฟลเดอร์ Graphics/ หรือ Audio/ ภายใน ZIP`);
       const pending=[];
