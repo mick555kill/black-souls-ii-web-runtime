@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp index.html style.css _site/
+          cp index.html style.css README.md README_TH.md _site/
           cp -R src vendor _site/
           mkdir -p _site/tests
           unzip -p black_souls_ii_web_v0_9_mkxp_title_boot.zip vxace_mkxp_boot_v0_9/vendor/ruby/ruby+stdlib.wasm > _site/vendor/ruby/ruby+stdlib.wasm
