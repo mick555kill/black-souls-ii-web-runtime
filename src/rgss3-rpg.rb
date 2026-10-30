@@ -90,8 +90,9 @@ class Table
     raise ArgumentError, 'Invalid Table header' if raw.bytesize < 20
     dims, xs, ys, zs, count = raw.unpack('l<5')
     raise ArgumentError, 'Invalid Table dimensions' unless (1..3).cover?(dims)
-    raise ArgumentError, 'Invalid Table size' unless xs > 0 && ys > 0 && zs > 0
-    raise ArgumentError, 'Table too large' if count > 20_000_000
+    # RGSS3 may serialize empty tables (e.g. 0x0x1) with no cells.
+    raise ArgumentError, 'Invalid Table size' unless xs >= 0 && ys >= 0 && zs >= 0
+    raise ArgumentError, 'Table too large' if count < 0 || count > 20_000_000
     raise ArgumentError, 'Table data length mismatch' unless count == xs * ys * zs && raw.bytesize == 20 + count * 2
     obj = allocate
     obj.instance_variable_set(:@xsize, xs)
