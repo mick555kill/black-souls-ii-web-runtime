@@ -104,8 +104,8 @@
     const inspect = VX.inspectRTP(zip);
     if (!inspect.installer) throw Error('Not a Windows Inno Setup RTP ZIP');
     report = onProgress;
-    const setup = zip.entries.find(e => /(^|\\/)Setup\\.exe$/i.test(e.name));
-    const data = zip.entries.find(e => /(^|\\/)Setup-1\\.bin$/i.test(e.name));
+    const setup = zip.entries.find(e => /(^|\/)Setup\.exe$/i.test(e.name));
+    const data = zip.entries.find(e => /(^|\/)Setup-1\.bin$/i.test(e.name));
     if (!setup || !data) throw Error('RTP archive is missing Setup.exe or Setup-1.bin');
     onProgress('Reading RTP setup files locally; this may use hundreds of MiB of memory...');
     const [setupBlob, dataBlob] = await Promise.all([
