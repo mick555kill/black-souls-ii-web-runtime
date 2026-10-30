@@ -261,6 +261,14 @@
       const matching=sources.flatMap(source=>(source.names?.()||[]).filter(n=>n.toLowerCase().includes('ヤギ')));
       box.textContent+='\n🔎 !$ヤギ: '+(matching.length?'พบชื่อคล้ายกัน: '+matching.slice(0,6).join(', '):'ยังไม่พบไฟล์ชื่อ ヤギ ในแหล่งที่นำเข้า (ตรวจ Game.rgss3a และโฟลเดอร์เกม)');
     }
+    if(runtime.lastGameOverEvent){
+      const event=runtime.lastGameOverEvent;
+      box.textContent+='\n\n⚠️ Game Over: Map '+event.mapId+' · Event '+event.eventId+' · Command '+event.commandIndex;
+      box.textContent+='\nคำสั่งก่อน Game Over:\n'+event.recentCommands.map((cmd,index)=>
+        String(event.commandIndex-event.recentCommands.length+1+index)+': code '+cmd.code+
+        ' / indent '+cmd.indent+' / '+JSON.stringify(cmd.parameters).slice(0,180)).join('\n');
+      box.textContent+='\nตรวจเงื่อนไข Switch/Variable ใน Event นี้ก่อนลบ Game Over';
+    }
     if(r.routeScripts?.length)box.textContent+='\nroute:45 ล่าสุด (ยังไม่รัน Ruby):\n'+r.routeScripts.slice(-8).map(x=>'Map '+x.mapId+' Event '+(x.eventId??'?')+' ['+x.x+','+x.y+'] '+x.script).join('\n');
   }
   setInterval(()=>{if(runtime.project)updateReport();},1500);
