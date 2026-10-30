@@ -77,6 +77,7 @@
         <button id="rgssDemo" type="button">🎮 ให้ Ruby วาดและขยับ Sprite บน Canvas</button>
         <button id="rubyCompile" type="button" disabled>🧩 ตรวจไวยากรณ์สคริปต์เกม (ไม่รันเกม)</button>
         <div id="status" role="status" aria-live="polite">พร้อมอ่านไฟล์เกม</div>
+        <div id="progress-bar" hidden aria-hidden="true"></div>
         <details open><summary>รายงานความเข้ากันได้ (สด)</summary><pre id="report" class="report">ยังไม่ได้โหลดเกม</pre></details>
         <details><summary>ตอนนี้ทำอะไรได้แล้ว?</summary>
           <ul><li>นำเข้า Game.rgss3a, ZIP, โฟลเดอร์ และ RTP ZIP ที่มี Graphics/Audio/</li><li>ตัวนำเข้า RTP ต้นฉบับ Windows installer ผ่าน innoextract WASM (ทดลอง)</li><li>Autotile A1–A4, แผนที่, ตัวละคร และ Event แบบ JS Explorer</li><li>CRuby 3.2 WebAssembly โหลด RPG::* จาก .rvdata2</li><li>เรียกใช้สคริปต์เกม 223 ชุด และ Scene_Title.start / update ด้วย Ruby จริง (เกมอื่นอาจไม่เข้ากัน)</li><li>Title Screen เป็นหน้าทดลอง; ยังไม่รองรับการเล่นเกมเต็มรูปแบบ การโหลด DLL/Steam และวิดีโอ</li></ul>
