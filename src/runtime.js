@@ -208,7 +208,7 @@
         this.events = new Map();
         for (const ev of Object.values(map.events || {})) {
           if (!ev) continue;
-          const ch = new (VX().Character)(); ch.game = this; ch.locate(ev.x | 0, ev.y | 0);
+          const ch = new (VX().Character)(); ch.game = this; ch.eventId = ev.id; ch.locate(ev.x | 0, ev.y | 0);
           this.events.set(ev.id, {id: ev.id, data: ev, char: ch, page: null, pageIndex: -2, erased: false});
         }
         const sx = Number.isInteger(spot?.x) ? spot.x : Math.floor(map.width / 2), sy = Number.isInteger(spot?.y) ? spot.y : Math.floor(map.height / 2);
