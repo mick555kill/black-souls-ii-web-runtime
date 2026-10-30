@@ -78,6 +78,7 @@
       this.events = new Map(); this.tileCache = new Map(); this.charCache = new Map(); this.timers = []; this.cancelWaiters = [];
       this.keys = new Set(); this.triggered = new Set(); this.frameCount = 0; this.accum = 0; this.lastTime = 0;
       this.msg = null; this.choiceUI = null; this.fadeAlpha = 0; this.fadeAnim = null; this.busy = false;
+      this.tint = [0,0,0,0]; this.tintAnimation = null; this.bgsAudio = null; this.routeScripts = [];
       this.eventRunning = false; this.unsupportedCounts = {}; this.stateVersion = 0; this.dirty = true;
       this.autorunGuard = {id: null, count: 0, version: -1}; this.parallel = new Map(); this.parallax = null; this.lastPos = '';
       this.render();
@@ -138,10 +139,53 @@
       await this.enterMap(mapId, {x, y, dir: p[4] || this.player.dir});
       if (useFade) await this.fade(false);
     }
+    reportRouteScript(script, character) {
+      const code = String(script || '');
+      const location = {mapId:this.mapId, eventId:character?.eventId ?? null, x:character?.x ?? null, y:character?.y ?? null, script:code.slice(0,400)};
+      this.routeScripts.push(location);
+      if(this.routeScripts.length>80)this.routeScripts.shift();
+      this.unsupported('route:45');
+      console.warn('[VX Ace route:45] Ruby script requires RGSS execution', location);
+    }
+    async tintScreen(tone, frames, wait) {
+      const goal = [0,1,2,3].map(i=>Math.max(i===3?0:-255,Math.min(i===3?255:255,Number(tone?.[i] ?? tone?.[['red','green','blue','gray'][i]] ?? 0)||0)));
+      const start = this.tint.slice(), duration=Math.max(0,frames);
+      if(!duration){this.tint=goal;this.dirty=true;return;}
+      this.tintAnimation={start,goal,total:duration,elapsed:0};
+      if(wait)await this.wait(duration);
+    }
+    async playBGS(audio) {
+      if(!audio?.name){this.bgsAudio?.pause();this.bgsAudio=null;return;}
+      const name=String(audio.name);
+      const candidates=['ogg','m4a','mp3','wav'];
+      const path=candidates.map(ext=>'Audio/BGS/'+name+'.'+ext).find(path=>this.project?.source?.has(path));
+      if(!path){this.unsupported('bgs-missing:'+name);return;}
+      try {
+        const bytes=await this.project.source.read(path, 32*1024*1024);
+        const blob=new Blob([bytes],{type:path.endsWith('.ogg')?'audio/ogg':'audio/mp4'});
+        const url=URL.createObjectURL(blob);
+        this.bgsAudio?.pause();
+        if(this.bgsAudio?.dataset?.vxUrl)URL.revokeObjectURL(this.bgsAudio.dataset.vxUrl);
+        const player=new Audio(url);player.dataset.vxUrl=url;player.loop=true;
+        player.volume=Math.max(0,Math.min(1,(Number(audio.volume) || 0)/100));
+        player.playbackRate=Math.max(.5,Math.min(2,(Number(audio.pitch)||100)/100));
+        this.bgsAudio=player;
+        await player.play().catch(error=>{this.unsupported('bgs-playback-blocked');console.warn(error);});
+      }catch(error){this.unsupported('bgs-error:'+name);console.warn(error);}
+    }
+    async nameInput(actorId,maxChars) {
+      const actor=this.project?.actor(actorId);
+      if(!actor){this.unsupported('name-actor-missing:'+actorId);return;}
+      const previous=this.state.actorNames[actorId] || actor.name || '';
+      const entered=typeof window!=='undefined'&&typeof window.prompt==='function'
+        ? window.prompt('ชื่อตัวละคร (สูงสุด '+Math.max(1,maxChars)+' ตัวอักษร)',previous) : null;
+      if(entered!==null)this.state.actorNames[actorId]=Array.from(entered).slice(0,Math.max(1,maxChars)).join('');
+    }
     // ---------- project / map ----------
     async setProject(project) {
       this.project = project; this.state = new (VX().GameState)(); this.unsupportedCounts = {}; project.missing.clear();
       this.eventRunning = false; this.fadeAlpha = 0; this.fadeAnim = null;
+      this.bgsAudio?.pause(); this.bgsAudio=null;this.tint=[0,0,0,0];this.tintAnimation=null;this.routeScripts=[];
       const ids = project.mapIds(), start = project.system?.start_map_id, ok = !!project.maps[start];
       await this.enterMap(ok ? start : ids[0], {x: ok ? project.system.start_x : null, y: ok ? project.system.start_y : null, dir: 2});
     }
@@ -164,7 +208,7 @@
         this.events = new Map();
         for (const ev of Object.values(map.events || {})) {
           if (!ev) continue;
-          const ch = new (VX().Character)(); ch.game = this; ch.locate(ev.x | 0, ev.y | 0);
+          const ch = new (VX().Character)(); ch.game = this; ch.eventId = ev.id; ch.locate(ev.x | 0, ev.y | 0);
           this.events.set(ev.id, {id: ev.id, data: ev, char: ch, page: null, pageIndex: -2, erased: false});
         }
         const sx = Number.isInteger(spot?.x) ? spot.x : Math.floor(map.width / 2), sy = Number.isInteger(spot?.y) ? spot.y : Math.floor(map.height / 2);
@@ -283,6 +327,11 @@
         const f = this.fadeAnim; f.t += 1; this.fadeAlpha = f.from + (f.to - f.from) * Math.min(1, f.t / f.len);
         if (f.t >= f.len) { this.fadeAnim = null; f.resolve(); }
       }
+      if (this.tintAnimation) {
+        const a=this.tintAnimation; a.elapsed++;
+        this.tint=a.start.map((value,i)=>value+(a.goal[i]-value)*Math.min(1,a.elapsed/a.total));
+        if(a.elapsed>=a.total)this.tintAnimation=null;
+      }
       if (this.map && !this.busy) {
         if (this.dirty) this.refreshEvents();
         this.updateUI();
@@ -361,6 +410,7 @@
     // ---------- save / load ----------
     saveKey() { return `vxace-web-save-v2:${this.project?.title || 'game'}`; }
     save() {
+      if (this.state.saveDisabled) throw Error('Saving is disabled by the current event');
       if (!this.map) throw Error('No map loaded');
       const p = this.player;
       localStorage.setItem(this.saveKey(), JSON.stringify({v: 2, state: this.state.toJSON(), map: this.mapId, x: p.x, y: p.y, dir: p.dir}));
@@ -372,7 +422,7 @@
       this.state = VX().GameState.from(s.state); this.eventRunning = false;
       await this.enterMap(s.map, {x: s.x, y: s.y, dir: s.dir}); this.say('โหลดเซฟแล้ว');
     }
-    report() { return {unsupported: {...this.unsupportedCounts}, missing: this.project ? [...this.project.missing] : []}; }
+    report() { return {unsupported: {...this.unsupportedCounts}, missing: this.project ? [...this.project.missing] : [], routeScripts:this.routeScripts.slice()}; }
     // ---------- rendering ----------
     camera() {
       const W = this.map.width * TILE, H = this.map.height * TILE, p = this.player;
@@ -481,6 +531,13 @@
         for (let z = 0; z < Math.min(3, depth); z++) { const id = data.at(x, y, z); if (high(id)) this.drawTile(id, dx, dy); }
       }
       chars.filter(ch => ch.priority === 2).forEach(ch => this.drawChar(ch, cam));
+      // RGSS3 screen tone: RGB offsets and gray desaturation overlay.
+      const [red,green,blue,gray]=this.tint;
+      if(gray>0){c.fillStyle='rgba(128,128,128,'+(Math.min(255,gray)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
+      const dark=[red,green,blue].map(v=>Math.max(0,-v));
+      if(dark.some(Boolean)){c.fillStyle='rgba('+dark.map(v=>Math.round(Math.max(0,255-v))).join(',')+','+(Math.max(...dark)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
+      const light=[red,green,blue].map(v=>Math.max(0,v));
+      if(light.some(Boolean)){c.fillStyle='rgba('+light.map(v=>Math.round(v)).join(',')+','+(Math.max(...light)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
       if (this.fadeAlpha > 0) { c.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`; c.fillRect(0, 0, SCREEN_W, SCREEN_H); }
       this.drawMessage(); this.drawChoices();
     }
