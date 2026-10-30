@@ -21,24 +21,35 @@
     $('clearSources').hidden=!names.length;
   }
   // Turn one picked File (or a folder's FileList) into asset sources.
-  async function addFile(file){
+  async function addFile(file,mode='game'){
+    if(mode==='rtp'&&!/\.zip$/i.test(file.name))throw Error('ไฟล์ RTP ต้องเป็น .zip ที่มีโฟลเดอร์ Graphics/ หรือ Audio/');
     if(/\.rgss3a$/i.test(file.name)){
-      sources.push(new VX.ArchiveSource(await VX.RGSS3Archive.open(file,n=>status(`พบ ${n} ไฟล์ใน Archive ...`))));names.push(file.name);return;
+      const archive=new VX.ArchiveSource(await VX.RGSS3Archive.open(file,n=>status(`พบ ${n} ไฟล์ใน Archive ...`)));
+      archive.kind='game';sources.push(archive);names.push(file.name);return;
     }
     if(/\.zip$/i.test(file.name)){
       status(`กำลังอ่าน ${file.name} ...`);
       const zip=await VX.ZipContainer.open(file);
-      let hasGame=false;
-      try{
-        const entry=zip.gameArchive();hasGame=true;
+      const rtp=VX.inspectRTP(zip);
+      const entry=zip.entries.find(e=>/(^|\/)Game\.rgss3a$/i.test(e.name));
+      if(rtp.installer&&!rtp.usable&&!entry){
+        throw Error(`${file.name} เป็น ZIP ตัวติดตั้ง RTP ของ Windows (Setup.exe + Setup-1.bin) ไม่ใช่ ZIP ภาพ/เสียง เบราว์เซอร์ยังแตก Inno Setup ไม่ได้ — ติดตั้ง RTP บน Windows แล้ว ZIP โฟลเดอร์ Graphics/ + Audio/ จากที่ติดตั้งมาเลือกใหม่`);
+      }
+      if(mode==='rtp'&&!rtp.usable)throw Error(`${file.name}: ไม่พบโฟลเดอร์ Graphics/ หรือ Audio/ ภายใน ZIP`);
+      const pending=[];
+      if(entry&&mode!=='rtp'){
         status(`พบ ${entry.name} · ${(entry.size/1048576).toFixed(1)} MiB`);
         const blob=await zip.unpackGame(m=>status(m));
-        sources.push(new VX.ArchiveSource(await VX.RGSS3Archive.open(blob)));
-      }catch(e){if(hasGame)throw e;}
+        const archive=new VX.ArchiveSource(await VX.RGSS3Archive.open(blob));
+        archive.kind='game';pending.push(archive);
+      }
       const loose=new VX.ZipSource(zip,file.name);
-      if(loose.names().length)sources.push(loose);
-      if(!hasGame&&!loose.names().length)throw Error(`${file.name}: ไม่พบ Game.rgss3a หรือโฟลเดอร์ Data/Graphics ใน ZIP`);
-      names.push(file.name);return;
+      const rtpOnly=mode==='rtp'||(!entry&&!loose.has('Data/MapInfos.rvdata2')&&!loose.has('Data/System.rvdata2'));
+      if(loose.names().length){loose.kind=rtpOnly?'rtp':'game';pending.push(loose);}
+      if(!pending.length)throw Error(`${file.name}: ไม่พบ Game.rgss3a หรือโฟลเดอร์ Data/Graphics/Audio/ ใน ZIP`);
+      sources.push(...pending);
+      names.push(`${rtpOnly?'🗂️ RTP · ':''}${file.name}${rtpOnly?` (${rtp.graphics} ภาพ / ${rtp.audio} เสียง)`:''}`);
+      return;
     }
     throw Error(`ไม่รองรับไฟล์ ${file.name} (ใช้ .rgss3a, .zip หรือเลือกโฟลเดอร์)`);
   }
@@ -46,9 +57,9 @@
     const list=[...files];if(!list.length)return;
     const root=(list[0].webkitRelativePath||'').split('/')[0]||'โฟลเดอร์';
     const game=list.find(f=>/(^|\/)Game\.rgss3a$/i.test(f.webkitRelativePath||f.name));
-    if(game)sources.push(new VX.ArchiveSource(await VX.RGSS3Archive.open(game)));
+    if(game){const archive=new VX.ArchiveSource(await VX.RGSS3Archive.open(game));archive.kind='game';sources.push(archive);}
     const folder=new VX.FolderSource(list,root);
-    if(folder.names().length)sources.push(folder);
+    if(folder.names().length){folder.kind=(!game&&!folder.has('Data/MapInfos.rvdata2'))?'rtp':'game';sources.push(folder);}
     if(!game&&!folder.names().length)throw Error('โฟลเดอร์นี้ไม่มี Data/ Graphics/ หรือ Game.rgss3a');
     names.push(`📁 ${root}`);
   }
@@ -57,9 +68,10 @@
     $('rubyCompile').disabled=true;$('rubyDataLoad').disabled=true;$('titleBoot').disabled=true;
     $('rubyDataCount').textContent='ยังไม่โหลด';currentProject=null;
     if(rubyVM){try{await rubyVM.clearRGSSData();}catch(error){console.warn('Ruby database reset:',error);}}
-    const combined=new VX.CompositeSource(sources.slice());
+    // RTP is always a fallback, even when the user selected it before the game.
+    const combined=new VX.CompositeSource([...sources.filter(s=>s.kind!=='rtp'),...sources.filter(s=>s.kind==='rtp')]);
     if(!combined.has('Data/MapInfos.rvdata2')){
-      state.textContent='WAITING';status('ยังไม่พบ Data/MapInfos.rvdata2 — เพิ่ม Game.rgss3a (หรือโฟลเดอร์/ZIP ที่มี Data/) ได้เลย',true);return;
+      state.textContent='WAITING';status(sources.some(s=>s.kind==='rtp')?'✅ RTP พร้อมใช้งานแล้ว — เพิ่มไฟล์ Game.rgss3a หรือ ZIP เกมเพื่อเปิดแมพ':'ยังไม่พบ Data/MapInfos.rvdata2 — เพิ่ม Game.rgss3a (หรือโฟลเดอร์/ZIP ที่มี Data/) ได้เลย',!sources.some(s=>s.kind==='rtp'));return;
     }
     status('กำลังอ่านฐานข้อมูลเกม ...');
     const project=await new VX.Project(combined).initialize();
@@ -89,6 +101,7 @@
     catch(e){state.textContent='ERROR';status(`ไม่สามารถเปิดเกม: ${e.message}`,true);console.error(e);}
   }
   $('archiveFile').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(async()=>{for(const f of files)await addFile(f);});});
+  $('rtpFile').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(async()=>{for(const f of files)await addFile(f,'rtp');});});
   $('folderInput').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(()=>addFolder(files));});
   $('clearSources').addEventListener('click',()=>{sources.length=0;names.length=0;currentProject=null;$('rubyCompile').disabled=true;$('rubyDataLoad').disabled=true;$('titleBoot').disabled=true;$('rubyDataCount').textContent='ยังไม่โหลด';rubyVM?.clearRGSSData().catch(console.warn);renderSources();state.textContent='WAITING';status('ล้างไฟล์ที่เลือกแล้ว');});
   $('rubyTest').addEventListener('click',async()=>{
