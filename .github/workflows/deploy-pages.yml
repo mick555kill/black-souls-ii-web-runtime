@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -39,6 +40,33 @@ jobs:
           test -s _site/vendor/ruby/ruby+stdlib.wasm
           test -s _site/tests/sample.rgss3a
           touch _site/.nojekyll
+      - name: Find latest successful innoextract WASM build
+        uses: actions/github-script@v7
+        id: inno-build
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'build-innoextract.yml',
+              status: 'success',
+              per_page: 1
+            });
+            if (!runs.data.workflow_runs.length) {
+              core.setFailed('No successful innoextract WASM build found');
+              return;
+            }
+            core.setOutput('run_id', String(runs.data.workflow_runs[0].id));
+      - name: Download innoextract WebAssembly artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: innoextract-wasm-prototype
+          run-id: ${{ steps.inno-build.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: _site/vendor/innoextract
+      - name: Verify innoextract browser bundle
+        run: |
+          test -s _site/vendor/innoextract/innoextract.js
+          test -s _site/vendor/innoextract/innoextract.wasm
       - name: Upload web artifact
         uses: actions/upload-pages-artifact@v3
         with:
