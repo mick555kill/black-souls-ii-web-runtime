@@ -7,14 +7,14 @@
   const LEFT90 = {2: 6, 6: 8, 8: 4, 4: 2}, RIGHT90 = {2: 4, 4: 8, 8: 6, 6: 2};
 
   class GameState {
-    constructor() { this.switches = {}; this.variables = {}; this.selfSwitches = {}; this.gold = 0; this.items = {}; this.steps = 0; }
+    constructor() { this.switches = {}; this.variables = {}; this.selfSwitches = {}; this.gold = 0; this.items = {}; this.steps = 0; this.saveDisabled = false; this.actorNames = {}; }
     sw(id) { return !!this.switches[id]; }
     setSw(id, v) { this.switches[id] = !!v; }
     v(id) { return this.variables[id] | 0; }
     setV(id, v) { this.variables[id] = Math.trunc(Number(v)) || 0; }
     ss(map, ev, ch) { return !!this.selfSwitches[`${map},${ev},${ch}`]; }
     setSS(map, ev, ch, v) { this.selfSwitches[`${map},${ev},${ch}`] = !!v; }
-    toJSON() { const {switches, variables, selfSwitches, gold, items, steps} = this; return {switches, variables, selfSwitches, gold, items, steps}; }
+    toJSON() { const {switches, variables, selfSwitches, gold, items, steps, saveDisabled, actorNames} = this; return {switches, variables, selfSwitches, gold, items, steps, saveDisabled, actorNames}; }
     static from(o) { const g = new GameState(); if (o && typeof o === 'object') for (const k of Object.keys(g.toJSON())) if (o[k] !== undefined) g[k] = o[k]; return g; }
   }
 
@@ -101,7 +101,8 @@
         case 37: this.through = true; return true; case 38: this.through = false; return true;
         case 39: this.transparent = true; return true; case 40: this.transparent = false; return true;
         case 41: this.graphic = {name: p[0] || '', index: p[1] | 0, tileId: 0}; return true;
-        default: if (g) g.unsupported(`route:${cmd.code}`); return true; // opacity, blend, SE, script...
+        case 45: if (g) g.reportRouteScript(p[0], this); return true; // report without unsafe eval
+        default: if (g) g.unsupported(`route:${cmd.code}`); return true; // opacity, blend, SE...
       }
     }
   }
@@ -173,15 +174,19 @@
             case 601: if (branch[ind] !== 0) jump([604]); break;
             case 602: if (branch[ind] !== 1) jump([604]); break;
             case 603: if (branch[ind] !== 2) jump([604]); break;
-            case 302: case 303: case 355: {
+            case 135: st.saveDisabled = p[0] === 0; break;
+            case 223: await h.tintScreen(p[0], p[1] | 0, p[2] === true); break;
+            case 245: await h.playBGS(p[0]); break;
+            case 303: await h.nameInput(p[0] | 0, p[1] | 0); break;
+            case 302: case 355: {
               const cont = cmd.code === 302 ? 605 : cmd.code === 355 ? 655 : 0; let j = i + 1;
               while (cont && list[j] && list[j].code === cont) j++;
               h.unsupported(cmd.code === 355 ? `script:${String(p[0] || '').slice(0, 60)}` : cmd.code); i = j - 1; break;
             }
             case 353: await h.notify('GAME OVER'); return;
             case 108: case 408: case 401: case 404: case 412: case 655: case 605: case 604: break;
-            case 132: case 133: case 241: case 242: case 243: case 244: case 245: case 246: case 249: case 250: case 251: case 261:
-            case 212: case 213: case 214: case 223: case 224: case 225: case 235: case 231: case 232: case 233: case 234: case 236:
+            case 132: case 133: case 241: case 242: case 243: case 244: case 246: case 249: case 250: case 251: case 261:
+            case 212: case 213: case 214: case 224: case 225: case 235: case 231: case 232: case 233: case 234: case 236:
               h.unsupported(cmd.code); break; // audio / pictures / screen effects: ignored but reported
             default: h.unsupported(cmd.code);
           }
