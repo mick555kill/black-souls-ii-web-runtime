@@ -183,7 +183,14 @@
               while (cont && list[j] && list[j].code === cont) j++;
               h.unsupported(cmd.code === 355 ? `script:${String(p[0] || '').slice(0, 60)}` : cmd.code); i = j - 1; break;
             }
-            case 353: await h.notify('GAME OVER'); return;
+            case 353: {
+              const details = {mapId:ctx.mapId, eventId:ctx.eventId, commandIndex:i,
+                recentCommands:list.slice(Math.max(0,i-8),i+1).map(c=>({code:c.code,indent:c.indent,parameters:c.code===355?'[Ruby script omitted]':c.parameters}))};
+              console.warn('[VX Ace] Event explicitly invoked Game Over', details);
+              h.lastGameOverEvent = details;
+              h.say('Game Over event: Map '+ctx.mapId+' Event '+ctx.eventId+' (command '+i+')');
+              await h.notify('GAME OVER'); return;
+            }
             case 108: case 408: case 401: case 404: case 412: case 655: case 605: case 604: break;
             case 132: case 133: case 241: case 242: case 243: case 244: case 246: case 249: case 250: case 251: case 261:
             case 212: case 213: case 214: case 224: case 225: case 235: case 231: case 232: case 233: case 234: case 236:
