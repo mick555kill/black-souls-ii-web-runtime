@@ -4,6 +4,10 @@ Experimental **RPG Maker VX Ace / RGSS3 WebAssembly** runtime exploring whether 
 
 > **Current status:** A Node Worker test executes 223/223 non-Main RGSS3 script entries from the supplied game data and calls `Scene_Title.start` plus 10 update frames in CRuby WebAssembly. Browser rendering with the complete game assets, New Game and normal gameplay **are not yet verified or implemented**. This is a prototype, not a finished game player.
 
+## Live browser preview
+
+**[Open the GitHub Pages web runtime](https://mick555kill.github.io/black-souls-ii-web-runtime/)** — try the Ruby WebAssembly VM, RGSS3 rendering prototype and map import controls. The web player processes any imported game files in your browser; it is **not yet a fully playable BLACK SOULS II runtime**.
+
 ## Download and try on Windows
 
 1. Download **[`black_souls_ii_web_v0_9_mkxp_title_boot.zip`](black_souls_ii_web_v0_9_mkxp_title_boot.zip)** from this repository.
