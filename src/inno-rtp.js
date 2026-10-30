@@ -125,6 +125,7 @@
       const ids = [];
       const walk = node => {
         if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { for (const item of node) walk(item); return; }
         if (Number.isInteger(node.fileId)) ids.push(node.fileId);
         for (const next of node.nodes || []) walk(next);
       };
