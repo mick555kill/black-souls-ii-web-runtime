@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0c1220">
+  <title>BLACK SOULS II — mkxp-z RGSS3 Title Boot v0.9</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="src/archive.js" defer></script>
+  <script src="src/zip.js" defer></script>
+  <script src="src/marshal.js" defer></script>
+  <script src="src/assets.js" defer></script>
+  <script src="src/autotile.js" defer></script>
+  <script src="src/game.js" defer></script>
+  <script src="src/scripts.js" defer></script>
+  <script src="src/ruby-vm.js" defer></script>
+  <script src="src/rgss3-data.js" defer></script>
+  <script src="src/rgss3-display.js" defer></script>
+  <script src="src/runtime.js" defer></script>
+  <script src="src/app.js" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <header>
+      <div class="brand"><span class="star">✧</span> BLACK SOULS II <strong>WEB RUNTIME</strong> <small>mkxp-z RGSS3 title boot · v0.9</small></div>
+      <span class="chip">RGSS3 BRIDGE · EXPERIMENTAL</span>
+    </header>
+    <section class="hero">
+      <div class="kicker">EXPERIMENTAL ENGINE / JAVASCRIPT + CANVAS</div>
+      <h1>เปิดแผนที่ VX Ace<br><span>พร้อม Ruby WebAssembly</span></h1>
+      <p>นำเข้าจาก <code>Game.rgss3a</code> โดยตรง หรือจาก <code>.zip</code> ของเกม Windows ที่บรรจุ Game.rgss3a อ่านข้อมูลแผนที่ VX Ace และสำรวจด้วยปุ่มสัมผัส โดยเก็บทุกอย่างบนอุปกรณ์ของคุณ</p>
+      <div class="alert" role="note"><strong>เป้าหมาย v0.9:</strong> รันสคริปต์จริงของเกม (ยกเว้น Main) แล้วเปิด Scene_Title ใน Ruby บน WebAssembly พร้อมภาพ/คำสั่งบน Canvas (ทดลอง) · ยังไม่ได้รันลูปเกมเต็มรูปแบบ เล่นต่อจาก Title ยังไม่ได้</div>
+    </section>
+    <div class="grid">
+      <main class="panel">
+        <div class="panel-title"><div><small>GAME VIEWPORT</small><h2>Map Explorer</h2></div><span id="engineState" class="tag">WAITING</span></div>
+        <div class="screen" id="screen"><canvas id="canvas" width="544" height="416" aria-label="VX Ace Map Canvas"></canvas><canvas id="rubyCanvas" width="544" height="416" aria-label="Ruby RGSS3 Canvas Overlay"></canvas></div>
+        <div class="toolbar">
+          <button id="save" type="button" disabled>💾 บันทึกตำแหน่ง</button>
+          <button id="load" type="button" disabled>↶ โหลด</button>
+          <button id="fullscreen" type="button">⛶ เต็มจอ</button>
+        </div>
+        <div class="gamepad" id="gamepad">
+          <div class="dpad">
+            <span></span><button data-key="up" aria-label="ขึ้น">▲</button><span></span>
+            <button data-key="left" aria-label="ซ้าย">◀</button><span class="center">✚</span><button data-key="right" aria-label="ขวา">▶</button>
+            <span></span><button data-key="down" aria-label="ลง">▼</button><span></span>
+          </div>
+          <div class="buttons"><button data-key="cancel" class="b">B</button><button data-key="ok" class="a">A</button></div>
+        </div>
+        <p class="tip">คีย์บอร์ด: ลูกศร/WASD เดิน · Enter/Z/A ใช้งาน · Esc/X ปิดบทสนทนา</p>
+      </main>
+      <aside class="panel sidebar">
+        <small>IMPORT ARCHIVE</small><h2>ไฟล์เกม VX Ace</h2>
+        <label class="import" id="importLabel" for="archiveFile"><span>⬆</span><strong>เลือก Game.rgss3a / ZIP (หรือลากมาวาง)</strong><em>เลือกได้หลายไฟล์ · ไม่อัปโหลดขึ้นเซิร์ฟเวอร์</em></label>
+        <input id="archiveFile" type="file" multiple accept=".rgss3a,.zip,application/zip" class="hidden">
+        <label class="import small" for="folderInput"><strong>📁 เลือกโฟลเดอร์เกม / โฟลเดอร์ RTP</strong><em>รองรับเกมที่แตกไฟล์แล้ว (Data/, Graphics/) และ RTP ที่เกมไม่ได้แถมมา</em></label>
+        <input id="folderInput" type="file" webkitdirectory multiple class="hidden">
+        <ul id="sourceList" class="sources"></ul><button id="clearSources" type="button" hidden>ล้างรายการไฟล์</button>
+        <div class="sample">ไม่มีไฟล์เกม? <a href="tests/sample.rgss3a" download="sample.rgss3a">ดาวน์โหลดแผนที่ตัวอย่าง</a> แล้วเลือกไฟล์นั้น</div>
+        <label class="select-label" for="mapSelect">เลือกแผนที่</label>
+        <select id="mapSelect" disabled><option>รอโหลดไฟล์เกม...</option></select>
+        <div class="metric"><span>ไฟล์ใน Archive</span><strong id="fileCount">—</strong></div>
+        <div class="metric"><span>จำนวนแผนที่</span><strong id="mapCount">—</strong></div>
+        <div class="metric"><span>ชื่อเกม</span><strong id="gameTitle">—</strong></div>
+        <div class="metric"><span>Ruby scripts ที่แยกได้</span><strong id="scriptCount">—</strong></div>
+        <div class="metric"><span>Ruby WebAssembly VM</span><strong id="rubyVersion">ยังไม่โหลด</strong></div>
+        <div class="metric"><span>ฐานข้อมูลใน Ruby</span><strong id="rubyDataCount">ยังไม่โหลด</strong></div>
+        <button id="rubyTest" type="button">💎 เปิด Ruby VM และทดสอบโค้ด</button>
+        <button id="rubyDataLoad" type="button" disabled>📚 โหลด .rvdata2 เป็น RPG::* ใน Ruby</button>
+        <button id="titleBoot" type="button" disabled>▶ บูต BLACK SOULS II Title Screen (RGSS3 จริง)</button>
+        <button id="rgssDemo" type="button">🎮 ให้ Ruby วาดและขยับ Sprite บน Canvas</button>
+        <button id="rubyCompile" type="button" disabled>🧩 ตรวจไวยากรณ์สคริปต์เกม (ไม่รันเกม)</button>
+        <div id="status" role="status" aria-live="polite">พร้อมอ่านไฟล์เกม</div>
+        <details open><summary>รายงานความเข้ากันได้ (สด)</summary><pre id="report" class="report">ยังไม่ได้โหลดเกม</pre></details>
+        <details><summary>ตอนนี้ทำอะไรได้แล้ว?</summary>
+          <ul><li>นำเข้า Game.rgss3a, ZIP, หรือโฟลเดอร์ (รวมเกมและ RTP)</li><li>Autotile A1–A4, แผนที่, ตัวละคร และ Event แบบ JS Explorer</li><li>CRuby 3.2 WebAssembly โหลด RPG::* จาก .rvdata2</li><li>เรียกใช้สคริปต์เกม 223 ชุด และ Scene_Title.start / update ด้วย Ruby จริง (เกมอื่นอาจไม่เข้ากัน)</li><li>Title Screen เป็นหน้าทดลอง; ยังไม่รองรับการเล่นเกมเต็มรูปแบบ การโหลด DLL/Steam และวิดีโอ</li></ul>
+        </details>
+        <a class="docs" href="README_TH.md">คู่มือและขอบเขตการรองรับ ↗</a>
+      </aside>
+    </div>
+    <footer>ไม่รวมไฟล์เกมหรือ RTP ที่มีลิขสิทธิ์ · CRuby WASM แนบ LICENSE/NOTICE · Prototype ยังไม่ใช่ RGSS3-compatible runtime ฉบับสมบูรณ์</footer>
+  </div>
+</body>
+</html>
