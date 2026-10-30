@@ -1,0 +1,45 @@
+name: Build innoextract WASM (experimental)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/build-innoextract.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: emscripten/emsdk:4.0.14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends cmake make git wget patch bzip2 xz-utils python3
+      - name: Clone LGPL/Zlib innoextract WASM port
+        run: |
+          git clone --depth 1 --branch wasm-main https://github.com/Mobica/innoextract-wasm.git innoextract-wasm
+      - name: Correct legacy Boost download URL
+        working-directory: innoextract-wasm
+        run: |
+          sed -i 's#https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/#https://archives.boost.io/release/1.82.0/source/#g' utils/build_deps.sh
+      - name: Compile WASM with Emscripten
+        working-directory: innoextract-wasm
+        run: |
+          . /emsdk/emsdk_env.sh || true
+          bash build.sh
+      - name: Upload WebAssembly prototype
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: innoextract-wasm-prototype
+          path: |
+            innoextract-wasm/build/*.wasm
+            innoextract-wasm/build/*.js
+            innoextract-wasm/build/*.html
+          if-no-files-found: error
