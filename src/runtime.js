@@ -185,6 +185,7 @@
     async setProject(project) {
       this.project = project; this.state = new (VX().GameState)(); this.unsupportedCounts = {}; project.missing.clear();
       this.eventRunning = false; this.fadeAlpha = 0; this.fadeAnim = null;
+      this.bgsAudio?.pause(); this.bgsAudio=null;this.tint=[0,0,0,0];this.tintAnimation=null;this.routeScripts=[];
       const ids = project.mapIds(), start = project.system?.start_map_id, ok = !!project.maps[start];
       await this.enterMap(ok ? start : ids[0], {x: ok ? project.system.start_x : null, y: ok ? project.system.start_y : null, dir: 2});
     }
@@ -325,6 +326,11 @@
       if (this.fadeAnim) {
         const f = this.fadeAnim; f.t += 1; this.fadeAlpha = f.from + (f.to - f.from) * Math.min(1, f.t / f.len);
         if (f.t >= f.len) { this.fadeAnim = null; f.resolve(); }
+      }
+      if (this.tintAnimation) {
+        const a=this.tintAnimation; a.elapsed++;
+        this.tint=a.start.map((value,i)=>value+(a.goal[i]-value)*Math.min(1,a.elapsed/a.total));
+        if(a.elapsed>=a.total)this.tintAnimation=null;
       }
       if (this.map && !this.busy) {
         if (this.dirty) this.refreshEvents();
@@ -525,6 +531,13 @@
         for (let z = 0; z < Math.min(3, depth); z++) { const id = data.at(x, y, z); if (high(id)) this.drawTile(id, dx, dy); }
       }
       chars.filter(ch => ch.priority === 2).forEach(ch => this.drawChar(ch, cam));
+      // RGSS3 screen tone: RGB offsets and gray desaturation overlay.
+      const [red,green,blue,gray]=this.tint;
+      if(gray>0){c.fillStyle='rgba(128,128,128,'+(Math.min(255,gray)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
+      const dark=[red,green,blue].map(v=>Math.max(0,-v));
+      if(dark.some(Boolean)){c.fillStyle='rgba('+dark.map(v=>Math.round(Math.max(0,255-v))).join(',')+','+(Math.max(...dark)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
+      const light=[red,green,blue].map(v=>Math.max(0,v));
+      if(light.some(Boolean)){c.fillStyle='rgba('+light.map(v=>Math.round(v)).join(',')+','+(Math.max(...light)/255)+')';c.fillRect(0,0,SCREEN_W,SCREEN_H);}
       if (this.fadeAlpha > 0) { c.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`; c.fillRect(0, 0, SCREEN_W, SCREEN_H); }
       this.drawMessage(); this.drawChoices();
     }
