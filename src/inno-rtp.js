@@ -39,9 +39,9 @@
         const writer = {
           ready: open.then(() => {}),
           async write(bytes) {
-            const destination = await open;
-            // Emscripten's HEAP is reused: capture bytes before yielding.
+            // Capture the WASM heap slice synchronously before any await.
             const copy = new Uint8Array(bytes);
+            const destination = await open;
             if (destination.stream) await destination.stream.write(copy);
             else destination.chunks.push(copy);
           },
