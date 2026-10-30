@@ -251,6 +251,12 @@
     const r=runtime.report(),box=$('report');
     const cmds=Object.entries(r.unsupported).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([k,v])=>`${k} ×${v}`);
     box.textContent=(cmds.length?`คำสั่ง Event ที่ข้ามไป: ${cmds.join(', ')}\n`:'ยังไม่พบคำสั่งที่ข้าม\n')+(r.missing.length?`ภาพที่หาไม่เจอ (${r.missing.length}): ${r.missing.slice(0,8).join(', ')}${r.missing.length>8?' …':''}\n→ เพิ่มโฟลเดอร์ RTP หรือไฟล์ภาพที่ขาดด้านบน`:'ภาพครบตามที่ใช้ไปแล้ว');
+    const goat='Graphics/Characters/!$ヤギ';
+    if(r.missing.some(path=>path===goat||path.startsWith(goat+'.'))){
+      const matching=sources.flatMap(source=>(source.names?.()||[]).filter(n=>n.toLowerCase().includes('ヤギ')));
+      box.textContent+='\n🔎 !$ヤギ: '+(matching.length?'พบชื่อคล้ายกัน: '+matching.slice(0,6).join(', '):'ยังไม่พบไฟล์ชื่อ ヤギ ในแหล่งที่นำเข้า (ตรวจ Game.rgss3a และโฟลเดอร์เกม)');
+    }
+    if(r.routeScripts?.length)box.textContent+='\nroute:45 ล่าสุด (ยังไม่รัน Ruby):\n'+r.routeScripts.slice(-8).map(x=>'Map '+x.mapId+' Event '+(x.eventId??'?')+' ['+x.x+','+x.y+'] '+x.script).join('\n');
   }
   setInterval(()=>{if(runtime.project)updateReport();},1500);
   const keyMap={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',a:'left',s:'down',d:'right',Enter:'ok',z:'ok',' ':'ok',Escape:'cancel',x:'cancel'};
