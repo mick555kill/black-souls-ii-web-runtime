@@ -12,6 +12,7 @@ button{cursor:pointer;color:var(--text);background:#293850;border:1px solid #506
 .import.small{min-height:0;padding:10px;margin:0 0 10px}.import.small strong{font-size:13px;margin:0 0 4px}.import.over{border-color:var(--aqua);background:#0d2a3a}
 .sources{list-style:none;padding:0;margin:0 0 10px;font-size:11px;color:var(--muted)}.sources li{padding:3px 0;border-bottom:1px solid #26364a;overflow-wrap:anywhere}#clearSources{font-size:11px;padding:5px 9px;margin-bottom:10px}
 .report{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,monospace;color:#bcd0e2;background:#0a1626;border:1px solid #2b3f55;border-radius:8px;padding:9px;margin:8px 0 0}
+.rtp-note{color:var(--muted);font-size:11px;line-height:1.65;margin:4px 0 12px}
 canvas{outline:none}
 #rubyTest,#rubyCompile{width:100%;margin:6px 0 2px;text-align:left;font-size:12px;background:#292650;border:1px solid #6962a4;border-radius:9px;padding:10px}
 #rgssDemo{width:100%;margin:6px 0 2px;text-align:left;font-size:12px;background:#185044;border:1px solid #4cae9d;border-radius:9px;padding:10px}
