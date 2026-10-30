@@ -10,6 +10,7 @@
   <script src="src/zip.js" defer></script>
   <script src="src/marshal.js" defer></script>
   <script src="src/assets.js" defer></script>
+  <script src="src/rtp.js" defer></script>
   <script src="src/autotile.js" defer></script>
   <script src="src/game.js" defer></script>
   <script src="src/scripts.js" defer></script>
@@ -54,6 +55,9 @@
         <small>IMPORT ARCHIVE</small><h2>ไฟล์เกม VX Ace</h2>
         <label class="import" id="importLabel" for="archiveFile"><span>⬆</span><strong>เลือก Game.rgss3a / ZIP (หรือลากมาวาง)</strong><em>เลือกได้หลายไฟล์ · ไม่อัปโหลดขึ้นเซิร์ฟเวอร์</em></label>
         <input id="archiveFile" type="file" multiple accept=".rgss3a,.zip,application/zip" class="hidden">
+        <label class="import small" for="rtpFile"><strong>🗂️ เพิ่ม RTP แบบ ZIP</strong><em>เลือก ZIP ที่มี Graphics/ และ Audio/ · ไฟล์ RTP ในเกมจะมีความสำคัญก่อนเสมอ</em></label>
+        <input id="rtpFile" type="file" accept=".zip,application/zip" class="hidden">
+        <p class="rtp-note">ดาวน์โหลด <a href="https://www.rpgmakerweb.com/downloads" target="_blank" rel="noopener noreferrer">VX Ace RTP จาก RPG Maker</a> ได้ แต่ ZIP ต้นฉบับประกอบด้วยตัวติดตั้ง Windows (Setup.exe + Setup-1.bin) จึงยังนำเข้าโดยตรงในเบราว์เซอร์ไม่ได้ ต้องติดตั้ง/แตก RTP บน Windows แล้ว ZIP โฟลเดอร์ Graphics/ และ Audio/ มาเลือกที่นี่</p>
         <label class="import small" for="folderInput"><strong>📁 เลือกโฟลเดอร์เกม / โฟลเดอร์ RTP</strong><em>รองรับเกมที่แตกไฟล์แล้ว (Data/, Graphics/) และ RTP ที่เกมไม่ได้แถมมา</em></label>
         <input id="folderInput" type="file" webkitdirectory multiple class="hidden">
         <ul id="sourceList" class="sources"></ul><button id="clearSources" type="button" hidden>ล้างรายการไฟล์</button>
@@ -74,7 +78,7 @@
         <div id="status" role="status" aria-live="polite">พร้อมอ่านไฟล์เกม</div>
         <details open><summary>รายงานความเข้ากันได้ (สด)</summary><pre id="report" class="report">ยังไม่ได้โหลดเกม</pre></details>
         <details><summary>ตอนนี้ทำอะไรได้แล้ว?</summary>
-          <ul><li>นำเข้า Game.rgss3a, ZIP, หรือโฟลเดอร์ (รวมเกมและ RTP)</li><li>Autotile A1–A4, แผนที่, ตัวละคร และ Event แบบ JS Explorer</li><li>CRuby 3.2 WebAssembly โหลด RPG::* จาก .rvdata2</li><li>เรียกใช้สคริปต์เกม 223 ชุด และ Scene_Title.start / update ด้วย Ruby จริง (เกมอื่นอาจไม่เข้ากัน)</li><li>Title Screen เป็นหน้าทดลอง; ยังไม่รองรับการเล่นเกมเต็มรูปแบบ การโหลด DLL/Steam และวิดีโอ</li></ul>
+          <ul><li>นำเข้า Game.rgss3a, ZIP, โฟลเดอร์ และ RTP ZIP ที่มี Graphics/Audio/</li><li>ZIP ต้นฉบับของ RTP ที่เป็น Windows installer ต้องแตกไฟล์ก่อน</li><li>Autotile A1–A4, แผนที่, ตัวละคร และ Event แบบ JS Explorer</li><li>CRuby 3.2 WebAssembly โหลด RPG::* จาก .rvdata2</li><li>เรียกใช้สคริปต์เกม 223 ชุด และ Scene_Title.start / update ด้วย Ruby จริง (เกมอื่นอาจไม่เข้ากัน)</li><li>Title Screen เป็นหน้าทดลอง; ยังไม่รองรับการเล่นเกมเต็มรูปแบบ การโหลด DLL/Steam และวิดีโอ</li></ul>
         </details>
         <a class="docs" href="README_TH.md">คู่มือและขอบเขตการรองรับ ↗</a>
       </aside>
