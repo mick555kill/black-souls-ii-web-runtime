@@ -30,6 +30,11 @@ jobs:
           sed -i 's#https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/#https://archives.boost.io/release/1.82.0/source/#g' utils/build_deps.sh
           # Boost's old .bc suffix expects LLVM bitcode; Emscripten 4 otherwise emits wasm objects.
           sed -i 's#archiveflags="-r"#archiveflags="-r" cxxflags="-flto" cflags="-flto"#' utils/build_deps.sh
+      - name: Fix archive suffixes for current Emscripten linker
+        working-directory: innoextract-wasm
+        run: |
+          sed -i '/^\.\/utils\/build_deps.sh$/a for lib in deps/boost_1_82_0/stage/lib/libboost_*.bc; do cp "$lib" "${lib%.bc}.a"; done' build.sh
+          sed -i 's#\\.bc#\\.a#g' CMakeLists.txt
       - name: Compile WASM with Emscripten
         working-directory: innoextract-wasm
         run: |
