@@ -169,19 +169,19 @@
         const first=scripts.errors[0];
         throw Error(`Script #${first.index} (${first.name}): ${first.error}`);
       }
-      status('รันสคริปต์สำเร็จ กำลังสร้าง Scene_Title และวาด 10 เฟรมแรก ...');
+      status('รันสคริปต์สำเร็จ กำลังเข้าสู่ลูป RGSS3 (กด A เพื่อเลือก New Game) ...');
+      state.textContent='RGSS3 RUNNING';state.classList.add('ready');
+      // SceneManager.run drives Input.update / Graphics.update and scene
+      // transitions. A ten-frame probe only rendered a frozen Title Screen.
+      // Keep this worker request pending while the game is running.
       const result=await vm.runRGSS(`
-        DataManager.create_game_objects
-        $rgss_title_scene = Scene_Title.new
-        $rgss_title_scene.start
-        10.times { $rgss_title_scene.update }
-        "Scene_Title.start + update OK (#{Graphics.frame_count} frames)"
+        SceneManager.run
+        "SceneManager.run returned"
       `);
-      state.textContent='TITLE BOOTED';state.classList.add('ready');
-      status(`✅ ${result} · Ruby โหลด ${scripts.loaded} สคริปต์ · ภาพและเมนูจากเกมถูกส่งเข้า Canvas แล้ว (ยังไม่ใช่ลูปเล่นเกมเต็มรูปแบบ)`);
+      status('ลูป RGSS3 จบการทำงาน: '+result);
     }catch(error){
       state.textContent='TITLE ERROR';
-      status(`บูต Title Screen ไม่สำเร็จ: ${error.message}`,true);
+      status(`RGSS3 หยุดการทำงาน: ${error.message} — ดู Console สำหรับรายละเอียด`,true);
       console.error('RGSS3 title boot:',error);
     }finally{button.disabled=!currentProject?.scripts?.entries?.length;}
   });
