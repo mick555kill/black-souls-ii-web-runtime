@@ -34,7 +34,7 @@ jobs:
         working-directory: innoextract-wasm
         run: |
           sed -i '/^\.\/utils\/build_deps.sh$/a for lib in deps/boost_1_82_0/stage/lib/libboost_*.bc; do cp "$lib" "${lib%.bc}.a"; done' build.sh
-          sed -i 's#\\.bc#\\.a#g' CMakeLists.txt
+          sed -i 's#bc#a#g' CMakeLists.txt
       - name: Compile WASM with Emscripten
         working-directory: innoextract-wasm
         run: |
