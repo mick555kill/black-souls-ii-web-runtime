@@ -20,10 +20,18 @@
     names.forEach(n=>{const li=document.createElement('li');li.textContent=n;ul.append(li);});
     $('clearSources').hidden=!names.length;
   }
+  // Safari's Files picker may omit a file extension. Sniff only the first 8 bytes;
+  // do not load a large RGSS3A archive into RAM.
+  async function looksLikeRGSS3(file){
+    if(file.size<8)return false;
+    const bytes=new Uint8Array(await file.slice(0,8).arrayBuffer());
+    return [82,71,83,83,65,68,0,3].every((b,i)=>bytes[i]===b);
+  }
   // Turn one picked File (or a folder's FileList) into asset sources.
   async function addFile(file,mode='game'){
+    status(`เลือก ${file.name} · ${(file.size/1048576).toFixed(1)} MiB · กำลังอ่านไฟล์บนอุปกรณ์...`);
     if(mode==='rtp'&&!/\.zip$/i.test(file.name))throw Error('ไฟล์ RTP ต้องเป็น .zip ที่มีโฟลเดอร์ Graphics/ หรือ Audio/');
-    if(/\.rgss3a$/i.test(file.name)){
+    if(/\.rgss3a$/i.test(file.name) || await looksLikeRGSS3(file)){
       const archive=new VX.ArchiveSource(await VX.RGSS3Archive.open(file,n=>status(`พบ ${n} ไฟล์ใน Archive ...`)));
       archive.kind='game';sources.push(archive);names.push(file.name);return;
     }
@@ -108,6 +116,7 @@
     catch(e){state.textContent='ERROR';status(`ไม่สามารถเปิดเกม: ${e.message}`,true);console.error(e);}
   }
   $('archiveFile').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(async()=>{for(const f of files)await addFile(f);});});
+  $('archiveFileAny').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';if(!files.length)return;await handle(async()=>{for(const f of files)await addFile(f);});});
   $('rtpFile').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(async()=>{for(const f of files)await addFile(f,'rtp');});});
   $('folderInput').addEventListener('change',async e=>{const files=[...e.target.files];e.target.value='';await handle(()=>addFolder(files));});
   $('clearSources').addEventListener('click',()=>{sources.length=0;names.length=0;currentProject=null;$('rubyCompile').disabled=true;$('rubyDataLoad').disabled=true;$('titleBoot').disabled=true;$('rubyDataCount').textContent='ยังไม่โหลด';rubyVM?.clearRGSSData().catch(console.warn);renderSources();state.textContent='WAITING';status('ล้างไฟล์ที่เลือกแล้ว');});
