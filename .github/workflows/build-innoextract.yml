@@ -35,6 +35,11 @@ jobs:
         run: |
           sed -i '/^\.\/utils\/build_deps.sh$/a for lib in deps/boost_1_82_0/stage/lib/libboost_*.bc; do cp "$lib" "${lib%.bc}.a"; done' build.sh
           sed -i 's#bc#a#g' CMakeLists.txt
+      - name: Export heap view for Inno Setup file streaming
+        working-directory: innoextract-wasm
+        run: |
+          sed -i 's/-sEXPORTED_RUNTIME_METHODS=ccall,cwrap /-sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8 /' CMakeLists.txt
+          sed -i 's/-sINITIAL_MEMORY=1024MB -sSTACK_SIZE=512MB/-sINITIAL_MEMORY=256MB -sSTACK_SIZE=16MB/' CMakeLists.txt
       - name: Compile WASM with Emscripten
         working-directory: innoextract-wasm
         run: |
