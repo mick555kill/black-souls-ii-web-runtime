@@ -175,8 +175,13 @@
       // transitions. A ten-frame probe only rendered a frozen Title Screen.
       // Keep this worker request pending while the game is running.
       const result=await vm.runRGSS(`
-        SceneManager.run
-        "SceneManager.run returned"
+        begin
+          SceneManager.run
+          "SceneManager.run returned"
+        rescue Exception => e
+          trace = Array(e.backtrace).first(24).join(" | ")
+          raise RuntimeError, "#{e.class}: #{e.message} [Backtrace: #{trace}]"
+        end
       `);
       status('ลูป RGSS3 จบการทำงาน: '+result);
     }catch(error){
