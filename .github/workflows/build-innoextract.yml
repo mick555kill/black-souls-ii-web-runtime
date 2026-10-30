@@ -28,6 +28,8 @@ jobs:
         working-directory: innoextract-wasm
         run: |
           sed -i 's#https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/#https://archives.boost.io/release/1.82.0/source/#g' utils/build_deps.sh
+          # Boost's old .bc suffix expects LLVM bitcode; Emscripten 4 otherwise emits wasm objects.
+          sed -i 's#archiveflags="-r"#archiveflags="-r" cxxflags="-flto" cflags="-flto"#' utils/build_deps.sh
       - name: Compile WASM with Emscripten
         working-directory: innoextract-wasm
         run: |
