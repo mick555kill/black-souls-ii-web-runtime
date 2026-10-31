@@ -226,6 +226,10 @@ self.addEventListener('message', async event => {
       throw Error(`Unknown worker command: ${type}`);
     }
   } catch (error) {
-    self.postMessage({id, ok: false, error: String(error.message || error)});
+    // Send the JavaScript/WASM stack too; Safari users cannot easily open
+    // worker developer tools, and some Ruby stack failures escape evalAsync.
+    const message=String(error?.message || error);
+    const trace=String(error?.stack || '');
+    self.postMessage({id, ok: false, error: message + (trace && !message.includes('Backtrace:') ? '\\nWorker trace: '+trace.slice(0,5000) : '')});
   }
 });
