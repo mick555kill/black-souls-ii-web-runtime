@@ -212,7 +212,21 @@
         case 9: return (st.items['w' + p[1]] | 0) > 0;
         case 10: return (st.items['a' + p[1]] | 0) > 0;
         case 11: return h.buttonDown(p[1]);
-        case 4: return p[1] === undefined ? false : h.partyHas(p[1]);
+        case 4: {
+          // VX Ace Actor condition: subtype 0=party, 1=name, 2=class,
+          // 3=skill, 4=weapon, 5=armor, 6=state.
+          const actorId = p[1] | 0, subtype = p[2] | 0;
+          if (subtype === 0) return h.partyHas(actorId);
+          if (subtype === 1) {
+            const actor = h.project?.actor(actorId);
+            if (!actor) { h.unsupported('actor-condition-missing:'+actorId); return false; }
+            const name = Object.prototype.hasOwnProperty.call(st.actorNames, actorId)
+              ? st.actorNames[actorId] : actor.name;
+            return String(name ?? '') === String(p[3] ?? '');
+          }
+          h.unsupported('actor-condition:'+subtype);
+          return false;
+        }
         default: h.unsupported(p[0] === 12 ? 'script-condition' : `cond:${p[0]}`); return false;
       }
     }
