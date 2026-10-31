@@ -230,6 +230,13 @@ self.addEventListener('message', async event => {
     // worker developer tools, and some Ruby stack failures escape evalAsync.
     const message=String(error?.message || error);
     const trace=String(error?.stack || '');
-    self.postMessage({id, ok: false, error: message + (trace && !message.includes('Backtrace:') ? '\\nWorker trace: '+trace.slice(0,5000) : '')});
+    let rubyTrace='';
+    if(vm && /SystemStackError|stack level too deep/.test(message)) {
+      try {
+        rubyTrace=String(vm.eval(`begin; e=$!; e ? ([e.class.to_s+': '+e.message]+Array(e.backtrace).first(30)).join(' | ') : 'No active Ruby exception'; rescue Exception => x; 'Backtrace unavailable: '+x.class.to_s; end`));
+      } catch(traceError) { rubyTrace='Unable to inspect Ruby exception: '+String(traceError?.message || traceError); }
+    }
+    const details=[message,rubyTrace ? 'Ruby trace: '+rubyTrace : '',trace ? 'Worker trace: '+trace.slice(0,5000) : 'Worker stack not available'].filter(Boolean).join('\n');
+    self.postMessage({id, ok: false, error: details});
   }
 });
