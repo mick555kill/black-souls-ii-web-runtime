@@ -21,6 +21,11 @@ Experimental **RPG Maker VX Ace / RGSS3 WebAssembly** runtime exploring whether 
 
 If `node` is not recognized, install Node.js and open a *new* PowerShell terminal. The fallback static server is `py -m http.server --bind 127.0.0.1 8000`, but Node is needed for the Node Worker tests.
 
+### Official VX Ace RTP ZIP
+
+The **🗂️ Add RTP as ZIP** control can try the official `RPGVXAce_RTP.zip` downloaded from [RPG Maker](https://www.rpgmakerweb.com/downloads). The browser uses an experimental innoextract WebAssembly importer to unpack its `Setup.exe` and `Setup-1.bin` locally; selected files are not uploaded to a server. Extraction may use several hundred MiB of RAM, and support varies by browser and device. If it fails, install the RTP on Windows and import the installed `Graphics/` and `Audio/` folders instead.
+
+
 ## Source layout
 
 - `src/` — JavaScript runtime, archive readers, Ruby bridge, RGSS3 bootstrap and rendering
