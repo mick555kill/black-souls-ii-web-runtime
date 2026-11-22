@@ -1,0 +1,22 @@
+const fs=require('node:fs'),vm=require('node:vm');
+const dir=process.argv[2];
+if(!dir)throw Error('Usage: node playtest.cjs path/to/Game.rgss3a');
+require('./vendor/opal.js');require('./vendor/compiler.js');require('./game/manifest.js');require('./adapters/generated.js');
+const load=file=>vm.runInThisContext(fs.readFileSync(file,'utf8'),{filename:file});
+load('web/host.js');
+for(const file of ['adapters/graphics.js','adapters/rgss3-rpg-classes.js',...gameScripts.filter(s=>s.name!=='Main').map(s=>'game/'+s.file)])new Function('self',fs.readFileSync(file,'utf8'))(Opal.top);
+for(const file of ['archive','assets','marshal','project','data'])load('web/'+file+'.js');
+(async()=>{
+const src=new VX.ArchiveSource(await VX.RGSS3Archive.open(await fs.openAsBlob(dir)));
+const project=await new VX.Project(src).initialize();
+await prepareDatabase(project);
+globalThis.loadMapData=async id=>{const key='data/map'+String(id).padStart(3,'0')+'.rvdata2';if(!database.has(key))database.set(key,rubyValue(await project.loadMap(id)));};
+let named=false,confirmed=false;
+globalThis.playerUI={message(text){if(named && text.includes('is that right'))confirmed=true;console.log('Message',text);return ()=>true;},choice(a,done){done(0);return ()=>true;},name(s,n,done){console.log('Name input');named=true;done('Mick');return ()=>true;}};
+load('web/events.js');
+Opal.DataManager.$init();
+const scene=Opal.Scene_Title.$new(); scene.$start();scene.$post_start();for(let i=0;i<10;i++)scene.$update();
+console.log('Original Scene_Title updated for 10 frames');
+scene.$command_new_game();console.log('Original New Game',Opal.gvars.game_map.$map_id(),Opal.gvars.game_player.$x(),Opal.gvars.game_player.$y());
+const mapScene=Opal.SceneManager.$scene();mapScene.$start();mapScene.$post_start();for(let i=0;i<400;i++){mapScene.$update();await new Promise(r=>setImmediate(r));}require('node:assert/strict').equal(Opal.gvars.game_map.$map_id(),7);require('node:assert/strict').ok(named&&confirmed);console.log('Original Scene_Map ran 400 frames',Opal.gvars.game_map.$map_id());
+})().catch(e=>{console.error(e.message,e.stack?.slice(0,1800));process.exitCode=1;});
