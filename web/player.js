@@ -47,7 +47,7 @@ el('folder').onchange=async e=>{
 const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',z:'ok',Escape:'cancel',x:'cancel',Shift:'shift'};
 const pointers=new Map(), keyboard=new Map();
 const padButtons=[...document.querySelectorAll('.pad [data-key]')];
-if(navigator.maxTouchPoints>0)document.body.classList.add('touch-device');
+
 
 function syncKey(key){
  if(!key)return;
@@ -78,18 +78,29 @@ function releaseControls(){
 }
 onblur=releaseControls;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls()});
-for(const button of padButtons){
- button.onpointerdown=e=>{
-  if(e.button!==0)return;
-  e.preventDefault();button.setPointerCapture(e.pointerId);
-  setPointer(e.pointerId,button.dataset.key);
- };
- button.onpointermove=e=>{
-  if(!pointers.has(e.pointerId) || !button.closest('.directions'))return;
-  const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('.directions [data-key]');
-  setPointer(e.pointerId,next?.dataset.key ?? null);
- };
- button.onlostpointercapture=button.onpointerup=button.onpointercancel=e=>setPointer(e.pointerId,undefined);
+const dpad=document.querySelector('.directions');
+function directionAt(e){
+ const rect=dpad.getBoundingClientRect();
+ const x=2*(e.clientX-rect.left)/rect.width-1;
+ const y=2*(e.clientY-rect.top)/rect.height-1;
+ const distance=Math.hypot(x,y);
+ if(distance<.22 || distance>1)return null;
+ if(Math.abs(x)>Math.abs(y))return x<0?'left':'right';
+ return y<0?'up':'down';
+}
+function pressControl(control,e,key){
+ if(e.button!==0)return;
+ e.preventDefault();control.setPointerCapture(e.pointerId);setPointer(e.pointerId,key);
+}
+function releasePointer(e){setPointer(e.pointerId,undefined)}
+dpad.onpointerdown=e=>pressControl(dpad,e,directionAt(e));
+dpad.onpointermove=e=>{
+ if(pointers.has(e.pointerId))setPointer(e.pointerId,directionAt(e));
+};
+dpad.onlostpointercapture=dpad.onpointerup=dpad.onpointercancel=releasePointer;
+for(const button of document.querySelectorAll('.actions [data-key]')){
+ button.onpointerdown=e=>pressControl(button,e,button.dataset.key);
+ button.onlostpointercapture=button.onpointerup=button.onpointercancel=releasePointer;
 }
 el('screen').onpointerdown=e=>{
  if(!active||!scene)return;
