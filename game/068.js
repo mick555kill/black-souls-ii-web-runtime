@@ -138,13 +138,13 @@
         self.$change_number(1)
       };
       if ($truthy($$('Input')['$repeat?']("LEFT"))) {
-        self.$change_number(1)
+        self.$change_number(-1)
       };
       if ($truthy($$('Input')['$repeat?']("UP"))) {
         self.$change_number(10)
       };
       if ($truthy($$('Input')['$repeat?']("DOWN"))) {
-        return self.$change_number(10)
+        return self.$change_number(-10)
       } else {
         return nil
       };

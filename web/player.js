@@ -2,42 +2,11 @@
 const el=id=>document.getElementById(id);
 let project,scene,active=false,frameTime=0;
 globalThis.display=new VX.RGSS3Display(el('screen'),()=>project);
-const modal=el('dialog');
+hostMethods.resize(Opal.Graphics.$width(),Opal.Graphics.$height());
 function errorMessage(error){
- active=false;el('status').textContent='หยุดที่ '+(scene?.$$class?.$$name||'เริ่มต้น')+' · '+String(error.message||error);
- el('start').hidden=true;console.error(error);
+ active=false;el('status').classList.add('error');el('status').textContent='หยุดที่ '+(scene?.$$class?.$$name||'เริ่มต้น')+' · '+String(error.message||error);
+ console.error(error);
 }
-const panels=[];
-function panel(text,build){
- let done=false;
- const show=()=>showPanel(text,build,()=>{
-  done=true;
-  panels.shift();
-  if(panels.length)panels[0]();
- });
- panels.push(show);
- if(panels.length===1)show();
- return ()=>done;
-}
-function showPanel(text,build,complete){
- clearInput();
- modal.replaceChildren();const p=document.createElement('p');
- p.textContent=String(text).replace(/\\N\[(\d+)\]/gi,(_,id)=>Opal.gvars.game_actors['$[]'](+id).$name()).replace(/\\c\[\d+\]|\\[.!|^]/gi,'');
- modal.append(p);modal.hidden=false;
- build(()=>{modal.hidden=true;modal.replaceChildren();el('screen').focus();complete();});
-}
-function button(text,onClick){
- const b=document.createElement('button');b.textContent=text;b.onclick=onClick;modal.append(b);return b;
-}
-globalThis.playerUI={
- message:text=>panel(text,finish=>button('ต่อไป',finish).focus()),
- choice:(options,done)=>panel('เลือกคำตอบ',finish=>options.forEach((s,i)=>{const b=button(s,()=>{done(i);finish();});if(i===0)b.focus();})),
- name:(name,max,done)=>panel('ชื่อตัวละคร',finish=>{
-  const input=document.createElement('input');input.type='text';input.maxLength=max;input.value=name;modal.append(input);
-  const submit=()=>{if(!input.value.trim())return;done(input.value);finish();};
-  button('ยืนยันชื่อ',submit);input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();submit();}};input.focus();input.select();
- })
-};
 async function loadMapData(id){
  const key='data/map'+String(id).padStart(3,'0')+'.rvdata2';
  if(!database.has(key))database.set(key,rubyValue(await project.loadMap(id)));
@@ -51,7 +20,7 @@ function tick(t){
    if(current!==scene){
     if(scene){scene.$pre_terminate();scene.$terminate();}
     scene=current;scene.$start();scene.$post_start();
-    el('start').hidden=scene.$$class!==Opal.Scene_Title;
+
    }
    scene.$update();display.render();
    const map=Opal.gvars.game_map, id=map?.$map_id?.();
@@ -67,33 +36,49 @@ el('folder').onchange=async e=>{
   display.unlockAudio();
   const game=files.find(f=>/^Game\.rgss3a$/i.test(f.name));
   if(!game)throw Error('ไม่พบ Game.rgss3a ในโฟลเดอร์ที่เลือก');
-  const source=new VX.CompositeSource([new VX.FolderSource(files),new VX.ArchiveSource(await VX.RGSS3Archive.open(game))]);
+  const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
+  await indexImageSizes(archive,folder);
+  const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
   project=await new VX.Project(source).initialize();await prepareDatabase(project);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
-  display.enabled=true;active=true;el('picker').hidden=true;el('screen').focus();requestAnimationFrame(tick);
+  display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();requestAnimationFrame(tick);
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
-el('start').onclick=()=>{try{display.unlockAudio();el('start').hidden=true;scene.$command_new_game();el('screen').focus();}catch(e){errorMessage(e);}};
 const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',z:'ok',Escape:'cancel',x:'cancel',Shift:'shift'};
-onkeydown=e=>{
- if(!active)return;
- if(!modal.hidden){
-  if(e.target.tagName==='INPUT')return;
-  const buttons=[...modal.querySelectorAll('button')], index=buttons.indexOf(document.activeElement);
-  if(e.key.toLowerCase()==='z'){
-   e.preventDefault();if(!e.repeat)(buttons[index]||buttons[0])?.click();
-  }else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&buttons.length){
-   e.preventDefault();const step=['ArrowUp','ArrowLeft'].includes(e.key)?-1:1;
-   buttons[(index+step+buttons.length)%buttons.length].focus();
-  }
-  return;
- }
- if(!keys[e.key])return;
- e.preventDefault();if(!e.repeat)pressKey(keys[e.key]);};
+onkeydown=e=>{if((e.key==="Enter"&&e.target.closest?.(".volume"))||!active||!keys[e.key])return;e.preventDefault();heldKeys.add(keys[e.key]);};
 onkeyup=e=>heldKeys.delete(keys[e.key]);
-onblur=()=>clearInput();
+onblur=()=>heldKeys.clear();
 for(const b of document.querySelectorAll('[data-key]')){
- b.onpointerdown=e=>{e.preventDefault();if(!modal.hidden){if(b.dataset.key==='ok')(modal.querySelector('button:focus')||modal.querySelector('button'))?.click();return;}
- b.setPointerCapture(e.pointerId);pressKey(b.dataset.key);};
+ b.onpointerdown=e=>{e.preventDefault();
+ b.setPointerCapture(e.pointerId);heldKeys.add(b.dataset.key);};
  b.onlostpointercapture=b.onpointerup=b.onpointercancel=()=>heldKeys.delete(b.dataset.key);
+}
+el('screen').onpointerdown=e=>{
+ if(!active||!scene)return;
+ const bounds=e.currentTarget.getBoundingClientRect();
+ const px=(e.clientX-bounds.left)*display.canvas.width/bounds.width;
+ const py=(e.clientY-bounds.top)*display.canvas.height/bounds.height;
+ const windows=[scene.message_window?.choice_window,...Object.values(scene)];
+ for(const w of windows){
+  if(!w?.active||typeof w.$item_rect!=='function'||!w.visible||!w['$open?']())continue;
+  const vp=display.viewports.get(display.sprites.get(w.id)?.viewport);
+  const x=px-w.x-w.padding+w.ox-(vp?vp.rect[0]-vp.ox:0);
+  const y=py-w.y-w.padding+w.oy-(vp?vp.rect[1]-vp.oy:0);
+  if(x<w.ox||y<w.oy||x>=w.ox+w.width-w.padding*2||y>=w.oy+w.height-w.padding-w.padding_bottom)continue;
+  for(let i=0;i<w.$item_max();i++){
+   const r=w.$item_rect(i);
+   if(x>=r.x&&x<r.x+r.width&&y>=r.y&&y<r.y+r.height){
+    w.$select(i);w.$process_ok();return;
+   }
+  }
+ }
+ if(scene.message_window?.pause){heldKeys.add('ok');setTimeout(()=>heldKeys.delete('ok'),100);}
+};
+
+for(const [button,step] of [['quieter',-10],['louder',10]]){
+ el(button).onclick=e=>{
+  display.setVolume(display.volumePercent+step);
+  el('volume-level').value=display.volumePercent+'%';
+  if(active&&e.detail>0)el('screen').focus();
+ };
 }

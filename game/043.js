@@ -67,7 +67,7 @@
 
       
       self.parallax = $$('Plane').$new(self.viewport1);
-      return ($a = [100], $send(self.parallax, 'z=', $a), $a[$a.length - 1]);
+      return ($a = [-100], $send(self.parallax, 'z=', $a), $a[$a.length - 1]);
     });
     
     $def(self, '$create_characters', function $$create_characters() {

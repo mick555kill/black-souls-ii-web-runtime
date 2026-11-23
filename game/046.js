@@ -20,7 +20,7 @@
       $$initialize.$$p = null;
       
       $send2(self, $find_super(self, 'initialize', $$initialize, false, true), 'initialize', [x, y, width, height], $yield);
-      self.index = 1;
+      self.index = -1;
       self.handler = $hash2([], {});
       self.cursor_fix = false;
       self.cursor_all = false;
@@ -126,7 +126,7 @@
     $def(self, '$unselect', function $$unselect() {
       var $a, self = this;
 
-      return ($a = [1], $send(self, 'index=', $a), $a[$a.length - 1])
+      return ($a = [-1], $send(self, 'index=', $a), $a[$a.length - 1])
     });
     
     $def(self, '$row', function $$row() {

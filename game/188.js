@@ -111,7 +111,7 @@
         
         if ($truthy(battler)) {
           
-          key = ($truthy(battler['$actor?']()) ? (battler.$voice_id()) : ($rb_times(battler.$enemy_id(), 1)));
+          key = ($truthy(battler['$actor?']()) ? (battler.$voice_id()) : ($rb_times(battler.$enemy_id(), -1)));
           if ($truthy(self['$silent_battler?'](battler))) {
             return nil
           };

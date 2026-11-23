@@ -1,24 +1,32 @@
 // RGSS resumes one interpreter per event. Preserve its index, branches and
 // command parameters on the original translated object between browser frames.
+const sceneYield=Symbol('scene yield');
+let handlingSceneCommand=false;
 const proto=Opal.Game_Interpreter.$$prototype;
-proto.$create_fiber=function(){this.fiber=this.list===Opal.nil?Opal.nil:true;this.pending=null;this.finishing=false;};
+proto.$create_fiber=function(){this.fiber=this.list===Opal.nil?Opal.nil:true;this.pending=null;};
 proto.$update=function(){
  if(this.fiber===Opal.nil)return;
- if(this.finishing){this.fiber=Opal.nil;return;}
  if(this.pending){if(!this.pending())return;this.pending=null;}
  for(let budget=0;budget<128 && this.index<this.list.length;budget++){
   const command=this.list[this.index], code=command.$code(), p=command.$parameters();
   this.params=p;this.indent=command.$indent();
   switch(code){
+   case 301:case 302:case 340:case 351:case 352:case 353:case 354:{
+    handlingSceneCommand=true;
+    try{this.$execute_command();}catch(e){if(e!==sceneYield)throw e;}
+    finally{handlingSceneCommand=false;}
+    this.index++;
+    return;
+   }
    case 101:{
     const lines=[];
     while(this.list[this.index+1]?.$code()===401)lines.push(this.list[++this.index].$parameters()[0]);
-    this.pending=playerUI.message(lines.join('\n'));break;
+    this.pending=playerUI.message(lines.join('\n'),p,this.list[this.index+1]?.$code()===102);break;
    }
-   case 102:this.pending=playerUI.choice(p[0],i=>this.branch['$[]='](this.indent,i));break;
+   case 102:this.pending=playerUI.choice(p[0],i=>this.branch['$[]='](this.indent,i),p[1],this);break;
    case 303:{
     const actor=Opal.gvars.game_actors['$[]'](p[0]);
-    this.pending=playerUI.name(actor.$name(),p[1],s=>actor['$name='](s));break;
+    this.pending=playerUI.name(actor.$name(),p[1],s=>actor['$name='](s),p[0]);break;
    }
    case 201:{
     const coord=i=>p[0]===0?p[i]:Opal.gvars.game_variables['$[]'](p[i]);
@@ -55,12 +63,11 @@ proto.$update=function(){
   this.index++;
   if(this.pending)return;
  }
- // RGSS yields once after the final command, including for an autorun event.
- if(this.index>=this.list.length)this.finishing=true;
+ if(this.index>=this.list.length)this.fiber=Opal.nil;
 };
 proto.$wait=function(frames){this.pending=()=>--frames<=0;};
 proto.$wait_for_message=function(){};
 const fiberClass=Opal.klass(Opal.Object,Opal.Object,'Fiber');
-Opal.defs(fiberClass,'$yield',()=>{throw Error('This command needs a resumable Fiber adapter');});
+Opal.defs(fiberClass,'$yield',()=>{if(handlingSceneCommand)throw sceneYield;throw Error('This command needs a resumable Fiber adapter');});
 // Browser dialogue takes ownership of message input for event commands 101/102/303.
-Opal.Window_Message.$$prototype.$update=function(){Opal.Window_Base.$$prototype.$update.call(this);};
+Opal.Window_Message.$$prototype.$update_fiber=function(){};

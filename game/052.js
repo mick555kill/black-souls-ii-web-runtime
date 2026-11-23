@@ -17,7 +17,7 @@
       $$initialize.$$p = null;
       
       $send2(self, $find_super(self, 'initialize', $$initialize, false, true), 'initialize', [x, y, self.$window_width(), self.$window_height()], null);
-      self.pending_index = 1;
+      self.pending_index = -1;
       return self.$refresh();
     });
     

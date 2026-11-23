@@ -105,7 +105,7 @@ module Graphics
   end
   def self.update
     @frame_count += 1
-    RGSSWeb.host.frame
+    RGSSWeb.host.frame(@frame_count)
     nil
   end
   def self.wait(duration)
@@ -224,7 +224,7 @@ class Bitmap
   def rect; Rect.new(0,0,@width,@height); end
   def initialize(width, height = nil)
     if width.is_a?(String)
-      @width, @height = 544, 416 # Asset dimensions become known asynchronously on JS side.
+      @width, @height = RGSSWeb.host.bitmapSize(width)
       @id = RGSSWeb.host.bitmapLoad(width).to_i
     else
       @width, @height = width.to_i, height.to_i
@@ -279,17 +279,25 @@ class Bitmap
       x,y,w,h,text,align = args
     end
     RGSSWeb.host.bitmapText(@id,x.to_i,y.to_i,w.to_i,h.to_i,text.to_s,(align||0).to_i,
-      @font.name.to_s,@font.size.to_i,@font.color.css)
+      @font.name,@font.size.to_i,@font.color.css,@font.bold,@font.italic,@font.outline,@font.out_color.css)
     nil
   end
   def text_size(text)
-    Rect.new(0,0,text.to_s.length * (@font.size * 0.6).round,@font.size)
+    Rect.new(0,0,RGSSWeb.host.measure(text.to_s,@font.name,@font.size,@font.bold,@font.italic),@font.size)
   end
+  def initialize_copy(source)
+    super
+    @id=RGSSWeb.host.bitmapCreate(@width,@height)
+    @font=source.font.clone
+    RGSSWeb.host.bitmapCopy(@id,source.id)
+  end
+  def hue_change(hue); RGSSWeb.host.bitmapHue(@id,hue); nil; end
+  def radial_blur(angle, count); RGSSWeb.host.bitmapRadialBlur(@id,angle,count); nil; end
   def blur; RGSSWeb.host.bitmapBlur(@id); nil; end
   def get_pixel(x,y)
     # RGSS expects synchronous pixel access; JS canvas readback is async from
     # WebAssembly's perspective. Default the Window skin's foreground to white.
-    Color.new(255,255,255)
+    Color.new(*RGSSWeb.host.pixel(@id,x,y))
   end
   def blt(x,y,source,rect,opacity = 255)
     RGSSWeb.host.bitmapBlt(@id,x.to_i,y.to_i,source.id,rect.x,rect.y,rect.width,rect.height,opacity.to_i)
@@ -301,6 +309,9 @@ class Bitmap
 end
 
 class Sprite
+  def flash(color, duration)
+    RGSSWeb.host.flash('Sprite', @id, color ? color.css : nil, duration.to_i, Graphics.frame_count)
+  end
   attr_reader :id, :bitmap, :x, :y, :z, :visible, :opacity, :zoom_x, :zoom_y, :ox, :oy
   attr_reader :src_rect, :viewport, :angle, :mirror
   attr_accessor :tone, :color, :blend_type,
@@ -344,6 +355,9 @@ class Sprite
 end
 
 class Viewport
+  def flash(color, duration)
+    RGSSWeb.host.flash('Viewport', @id, color ? color.css : nil, duration.to_i, Graphics.frame_count)
+  end
   attr_reader :id, :rect, :ox, :oy, :z, :visible
   attr_accessor :tone, :color
   def initialize(*args)
@@ -373,9 +387,11 @@ end
 class Plane < Sprite; end
 
 class Tilemap
+  attr_reader :viewport
   attr_reader :bitmaps, :map_data, :flags
   attr_accessor :ox, :oy, :visible
   def initialize(viewport=nil)
+    @viewport=viewport
     @layers = [0,200].map do |z|
       sprite = Sprite.new(viewport)
       sprite.bitmap = Bitmap.new(Graphics.width,Graphics.height)
@@ -419,11 +435,26 @@ class Window < Sprite
   def initialize(x = 0, y = 0, width = 0, height = 0)
     super(nil)
     self.x=x;self.y=y;self.width=width;self.height=height
+    self.z=100
     @padding=12;@padding_bottom=12;self.openness=255;@active=true
-    @contents_opacity=255;@cursor_rect=Rect.new;@arrows_visible=true;@pause=false
+    @contents_opacity=255;@cursor_rect=Rect.new.on_change do |r|
+      RGSSWeb.host.windowCursor(@id,r.x,r.y,r.width,r.height)
+    end
+    @arrows_visible=true;@pause=false
     RGSSWeb.host.spriteSet(@id,'window',true)
     self.contents=Bitmap.new(1,1)
   end
+  def windowskin=(bmp)
+    @windowskin=bmp
+    RGSSWeb.host.spriteSet(@id,'skin',bmp ? bmp.id : -1)
+  end
+  %i[contents_opacity back_opacity padding padding_bottom pause].each do |attr|
+    define_method("#{attr}=") do |value|
+      instance_variable_set("@#{attr}",value)
+      RGSSWeb.host.spriteSet(@id,attr.to_s,value)
+    end
+  end
+  attr_reader :back_opacity
   def width=(value);@width=value.to_i;RGSSWeb.host.spriteSet(@id,'windowWidth',@width);end
   def height=(value);@height=value.to_i;RGSSWeb.host.spriteSet(@id,'windowHeight',@height);end
   def openness=(value);@openness=value.to_i.clamp(0,255);RGSSWeb.host.spriteSet(@id,'windowOpenness',@openness);end
@@ -445,7 +476,9 @@ class Table
   end
   def [](*xyz)
     x,y,z=xyz
-    @cells[(x||0)+@xsize*((y||0)+@ysize*(z||0))]||0
+    y ||= 0; z ||= 0
+    return nil unless x >= 0 && x < @xsize && y >= 0 && y < @ysize && z >= 0 && z < @zsize
+    @cells[x+@xsize*(y+@ysize*z)]
   end
   def []=(*args)
     v=args.pop

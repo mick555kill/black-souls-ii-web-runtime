@@ -31,7 +31,7 @@
       self.event_proc = nil;
       self.preemptive = false;
       self.surprise = false;
-      self.actor_index = 1;
+      self.actor_index = -1;
       self.action_forced = nil;
       self.map_bgm = nil;
       self.map_bgs = nil;
@@ -129,7 +129,7 @@
         return nil
       }
     });
-    $defs(self, '$clear_actor', $assign_ivar_val("actor_index", 1));
+    $defs(self, '$clear_actor', $assign_ivar_val("actor_index", -1));
     $defs(self, '$next_command', function $$next_command() {
       var self = this;
       if (self.actor_index == null) self.actor_index = nil;

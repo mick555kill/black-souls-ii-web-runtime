@@ -42,7 +42,7 @@
       
       self.$_event_call_regions_initialize();
       self.event_call_regions = $hash2([], {});
-      return (self.old_region = 1);
+      return (self.old_region = -1);
     });
     $alias(self, "_event_call_regions_setup", "setup");
     
@@ -52,7 +52,7 @@
       
       self.$_event_call_regions_setup(map_id);
       self.event_call_regions = self.map.$get_event_call_regions();
-      return (self.old_region = 1);
+      return (self.old_region = -1);
     });
     
     $def(self, '$get_player_region', function $$get_player_region() {

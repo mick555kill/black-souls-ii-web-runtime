@@ -120,11 +120,11 @@
         case "whiten_loop":
           
           self.whiten_cnt = 0;
-          self.effect_duration = 1;
+          self.effect_duration = -1;
           self.battler_visible = true;
           break;
         case "whiten_loop_stop":
-          self.effect_duration = 1
+          self.effect_duration = -1
           break;
         default:
           nil
@@ -157,7 +157,7 @@
       var self = this, d = nil, col = nil;
 
       
-      d = $rb_times($rb_plus(90, $rb_divide(self.whiten_cnt, 180)), $$$($$('Math'), 'PI'));
+      d = $rb_times($rb_plus(-90, $rb_divide(self.whiten_cnt, 180)), $$$($$('Math'), 'PI'));
       col = $rb_times(255, $$('Math').$sin(d));
       self.whiten_cnt = $rb_plus(self.whiten_cnt, 6);
       self.whiten_cnt = self.whiten_cnt['$%'](180);

@@ -97,7 +97,7 @@
       var $a, self = this;
 
       if ($truthy($rb_gt(self.texts.$size(), 0))) {
-        return ($a = [1, $rb_plus(self.texts['$[]'](1), "\f")], $send(self.texts, '[]=', $a), $a[$a.length - 1])
+        return ($a = [-1, $rb_plus(self.texts['$[]'](-1), "\f")], $send(self.texts, '[]=', $a), $a[$a.length - 1])
       } else {
         return nil
       }

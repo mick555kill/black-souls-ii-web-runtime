@@ -438,7 +438,7 @@
       var self = this;
 
       if ($truthy(self.move_route.$repeat())) {
-        return (self.move_route_index = 1)
+        return (self.move_route_index = -1)
       } else if ($truthy(self.move_route_forcing)) {
         
         self.move_route_forcing = false;

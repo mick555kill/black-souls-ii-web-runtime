@@ -13,7 +13,7 @@
     $const_set($nesting[0], 'Words1', ["必中絶対命中", "物理絶対命中", "魔法絶対命中", "全絶対命中"]);
     $const_set($nesting[0], 'Words2', ["必中絶対回避", "物理絶対回避", "魔法絶対回避", "全絶対回避"]);
     $const_set($nesting[0], 'Word', "絶対命中");
-    $const_set($nesting[0], 'Value', [9.99, 9.99]);
+    $const_set($nesting[0], 'Value', [9.99, -9.99]);
     return $defs(self, '$words', function $$words(type) {
       
       if ($truthy(type)) {

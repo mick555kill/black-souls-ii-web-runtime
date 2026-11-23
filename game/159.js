@@ -2,7 +2,7 @@
   var $module = Opal.module, $const_set = Opal.const_set, $eqeq = Opal.eqeq, $def = Opal.def, $gvars = Opal.gvars, $hash2 = Opal.hash2, $klass = Opal.klass, $alias = Opal.alias, $truthy = Opal.truthy, $send = Opal.send, $send2 = Opal.send2, $find_super = Opal.find_super, $rb_plus = Opal.rb_plus, $rb_lt = Opal.rb_lt, $rb_divide = Opal.rb_divide, $thrower = Opal.thrower, $not = Opal.not, $rb_minus = Opal.rb_minus, $rb_gt = Opal.rb_gt, $rb_times = Opal.rb_times, $nesting = self.$$is_a_module ? [self] : [self.$$class], $$ = Opal.$r($nesting), nil = Opal.nil, $$$ = Opal.$$$;
   if ($gvars.imported == null) $gvars.imported = nil;
 
-  Opal.add_stubs('new,==,include?,note,[]=,attr_accessor,initialize,saba_enemyhp_initialize,display_critical,critical,result,saba_lock_hp_view=,saba_enemyhp_display_critical,include,bitmap=,width,height,size=,font,bitmap,system,dispose,saba_lock_hp_view,no_change?,+,<,save_enemy_status,clear,draw_status,times,size,max,/,[],battler,hp,mp,exist?,states,buff_icons,sort,clone,<=>,x,dead?,!,define_note?,enemy,draw_hp_mp_bar,draw_state,draw_hp_label,draw_hp_value,min,y,-,container_y,color=,label_color,draw_text,value_color,to_s,>,draw_background,*,mhp,gradient_fill_rect,hp_gauge_color1,hp_gauge_color2,mmp,mp_gauge_color1,mp_gauge_color2,%,each,saba_invisible?,draw_icon,icon_index,blt,stretch_blt,fill_rect,text_color,get_pixel,create_timer,create_timer_SabaEnemyStatus,dispose_timer,dispose_timer_SabaEnemyStatus,create_viewports,z=,create_viewports_SabaEnemyStatus,dispose_viewports,dispose_viewports_SabaEnemyStatus,update_viewports,update_viewports_SabaEnemyStatus,update,saba_hp_update_viewports,ox=,shake,screen');
+  Opal.add_stubs('new,==,include?,note,[]=,attr_accessor,initialize,saba_enemyhp_initialize,display_critical,critical,result,saba_lock_hp_view=,saba_enemyhp_display_critical,include,bitmap=,width,height,size=,font,bitmap,system,dispose,saba_lock_hp_view,no_change?,+,<,save_enemy_status,clear,draw_status,times,size,max,/,[],battler,hp,mp,exist?,states,buff_icons,sort,clone,<=>,x,dead?,!,define_note?,enemy,draw_hp_mp_bar,draw_state,draw_hp_label,draw_hp_value,min,y,-,container_y,color=,label_color,draw_text,value_color,to_s,-@,>,draw_background,*,mhp,gradient_fill_rect,hp_gauge_color1,hp_gauge_color2,mmp,mp_gauge_color1,mp_gauge_color2,%,each,saba_invisible?,draw_icon,icon_index,div,blt,stretch_blt,fill_rect,text_color,get_pixel,create_timer,create_timer_SabaEnemyStatus,dispose_timer,dispose_timer_SabaEnemyStatus,create_viewports,z=,create_viewports_SabaEnemyStatus,dispose_viewports,dispose_viewports_SabaEnemyStatus,update_viewports,update_viewports_SabaEnemyStatus,update,saba_hp_update_viewports,ox=,shake,screen');
   
   (function($base, $parent_nesting) {
     var self = $module($base, 'Saba');
@@ -29,10 +29,10 @@
       $const_set($nesting[0], 'VALUE_COLOR', $$('Color').$new(255, 255, 255));
       $const_set($nesting[0], 'VALUE_FONT_SIZE', 25);
       $const_set($nesting[0], 'VALUE_ALIGN', 1);
-      $const_set($nesting[0], 'TEXT_OFFSET_X', 35);
+      $const_set($nesting[0], 'TEXT_OFFSET_X', -35);
       $const_set($nesting[0], 'TEXT_OFFSET_Y', 0);
       $const_set($nesting[0], 'TEXT_WIDTH', 40);
-      $const_set($nesting[0], 'VALUE_OFFSET_X', 5);
+      $const_set($nesting[0], 'VALUE_OFFSET_X', -5);
       $const_set($nesting[0], 'VALUE_OFFSET_Y', 0);
       $const_set($nesting[0], 'VALUE_WIDTH', 40);
       $const_set($nesting[0], 'SHOW_HP_BAR', true);
@@ -43,7 +43,7 @@
       $const_set($nesting[0], 'BACKGROUND_IMAGE_FILE', "gauge_bg");
       $const_set($nesting[0], 'MARGIN_LEFT', 3);
       $const_set($nesting[0], 'MARGIN_RIGHT', 3);
-      $const_set($nesting[0], 'BG_OFFSET_Y', 3);
+      $const_set($nesting[0], 'BG_OFFSET_Y', -3);
       $const_set($nesting[0], 'Z_DEPTH', 100);
       $const_set($nesting[0], 'BAR_BG_COLOR', $$('Color').$new(50, 50, 50, 70));
       $const_set($nesting[0], 'BAR_BORDER_COLOR', $$('Color').$new(0, 0, 0));
@@ -55,12 +55,12 @@
       $const_set($nesting[0], 'BAR_WIDTH', 80);
       $const_set($nesting[0], 'BAR_HEIGHT', 4);
       $const_set($nesting[0], 'BAR_MIN_WIDTH', 2);
-      $const_set($nesting[0], 'SHIFT_Y', 15);
+      $const_set($nesting[0], 'SHIFT_Y', -15);
       $const_set($nesting[0], 'STATE_PAGE_CHANGE_INTERVAL', 60);
       $const_set($nesting[0], 'SHOW_STATE', true);
       $const_set($nesting[0], 'MAX_NUM_STATE', 4);
-      $const_set($nesting[0], 'STATE_OFFSET_X', 42);
-      return $const_set($nesting[0], 'STATE_OFFSET_Y', 11);
+      $const_set($nesting[0], 'STATE_OFFSET_X', -42);
+      return $const_set($nesting[0], 'STATE_OFFSET_Y', -11);
     })($nesting[0], $nesting);
     return (function($base, $parent_nesting) {
       var self = $module($base, 'SesSys');
@@ -356,7 +356,7 @@
       x = enemy_sprite.$x();
       y = self.$container_y(enemy_sprite);
       width = $$('BAR_WIDTH');
-      offset_x = $rb_divide($rb_minus(width, ), 2);
+      offset_x = $rb_divide(width['$-@'](), 2);
       offset_y = $$('BAR_OFFSET_Y');
       if ($truthy(can_shift)) {
         
@@ -476,7 +476,7 @@
       
       if (enabled == null) enabled = true;
       bitmap = $$('Cache').$system("Iconset");
-      rect = $$('Rect').$new($rb_times(icon_index['$%'](16), 24), $rb_times($rb_divide(icon_index, 16), 24), 24, 24);
+      rect = $$('Rect').$new($rb_times(icon_index['$%'](16), 24), $rb_times(icon_index.$div(16), 24), 24, 24);
       return self.$bitmap().$blt(x, y, bitmap, rect, ($truthy(enabled) ? (255) : (128)));
     }, -4);
     

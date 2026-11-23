@@ -19,7 +19,7 @@
     $const_set($nesting[0], 'ENEMY_AP_GAUGE_ALPHA', 128);
     $const_set($nesting[0], 'ENEMY_GAUGE_FRONT', false);
     $const_set($nesting[0], 'ENEMY_GAUGE_DRAW_DATA', [false, false, false, true]);
-    $const_set($nesting[0], 'ENEMY_GAUGE_POS_DATA', [18, 2, 8, 0]);
+    $const_set($nesting[0], 'ENEMY_GAUGE_POS_DATA', [-18, -2, 8, 0]);
     $const_set($nesting[0], 'ENEMY_GAUGE_WIDTH_DATA', [100, 100, 80, 100]);
     $const_set($nesting[0], 'ENEMY_HP_GAUGE_COLOR', [$$('Color').$new(32, 32, 64), $$('Color').$new(224, 128, 64), $$('Color').$new(240, 192, 64)]);
     $const_set($nesting[0], 'ENEMY_MP_GAUGE_COLOR', [$$('Color').$new(32, 32, 64), $$('Color').$new(64, 128, 192), $$('Color').$new(64, 192, 240)]);

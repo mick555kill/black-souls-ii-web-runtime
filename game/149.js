@@ -43,7 +43,7 @@
         case 1:
           rate = $$('Marshal').$load($$('Marshal').$dump($$$($$('ATB'), 'START_AP_RATE_PREEMPTIVE')))
           break;
-        case 1:
+        case -1:
           rate = $$('Marshal').$load($$('Marshal').$dump($$$($$('ATB'), 'START_AP_RATE_SURPRISE')))
           break;
         case 0:
@@ -264,7 +264,7 @@
       switch (mode) {
         case 1:
           return ($truthy(self.note['$=~'](/<開始ＡＰ=1,\[(\-*\d+),(\-*\d+)\]>/)) ? ([(($a = $gvars['~']) === nil ? nil : $a['$[]'](1)).$to_i(), (($a = $gvars['~']) === nil ? nil : $a['$[]'](2)).$to_i()]) : ([0, 0]))
-        case 1:
+        case -1:
           return ($truthy(self.note['$=~'](/<開始ＡＰ=-1,\[(\-*\d+),(\-*\d+)\]>/)) ? ([(($a = $gvars['~']) === nil ? nil : $a['$[]'](1)).$to_i(), (($a = $gvars['~']) === nil ? nil : $a['$[]'](2)).$to_i()]) : ([0, 0]))
         case 0:
           return ($truthy(self.note['$=~'](/<開始ＡＰ=0,\[(\-*\d+),(\-*\d+)\]>/)) ? ([(($a = $gvars['~']) === nil ? nil : $a['$[]'](1)).$to_i(), (($a = $gvars['~']) === nil ? nil : $a['$[]'](2)).$to_i()]) : ([0, 0]))

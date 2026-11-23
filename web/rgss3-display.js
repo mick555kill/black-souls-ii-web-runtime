@@ -9,7 +9,7 @@
       this.ctx=canvas.getContext('2d');
       this.getProject=getProject;
       this.bitmaps=new Map();this.sprites=new Map();this.tilemaps=new Map();this.viewports=new Map();this.channels=new Map();this.audioGeneration=new Map();
-      this.fadeAlpha=0;this.enabled=false;
+      this.volumePercent=100;this.fadeAlpha=0;this.enabled=false;
       this.maxBitmapPixels=4096*4096;
     }
     canvasOf(w,h){
@@ -23,10 +23,10 @@
       const canvas=this.canvasOf(w,h);
       this.bitmaps.set(id,{canvas,ctx:canvas.getContext('2d'),width:w,height:h,ready:true,pending:[]});
     }
-    async loadBitmap(id,path,rgssBitmap){
+    async loadBitmap(id,path){
       const project=this.getProject();
       if(!project)return;
-      const match=/^(?:Graphics\/)?([^/]+)\/(.+?)(?:\.(?:png|jpe?g))?$/i.exec(String(path));
+      const match=/^(?:Graphics\/)?([^/]+)\/(.+)$/i.exec(String(path));
       if(!match)return;
       const image=await project.image(match[1],match[2]);
       if(!image)return;
@@ -35,13 +35,18 @@
       const cv=this.canvasOf(image.width,image.height);
       cv.getContext('2d').drawImage(image,0,0);
       bitmap.canvas=cv;bitmap.ctx=cv.getContext('2d');bitmap.width=image.width;bitmap.height=image.height;
-      if(rgssBitmap){rgssBitmap.width=image.width;rgssBitmap.height=image.height;}
       bitmap.ready=true;
       for(const operation of bitmap.pending.splice(0))operation();
       if(this.enabled)this.render();
     }
     handle({op,args=[]}){
       switch(op){
+        case 'flash':{
+          const [type,id,color,duration,start]=args;
+          const target=(type==='Sprite'?this.sprites:this.viewports).get(id);
+          if(target)target.flash=duration>0?{color,duration,start}:null;
+          return;
+        }
         case 'frame':return this.frame();
         case 'resize':{
           // The project uses the fixed VX Ace 544x416 viewport.
@@ -55,7 +60,7 @@
           const [id,path]=args;
           this.makeBitmap(id,1,1);
           const bitmap=this.bitmaps.get(id);bitmap.ready=false;
-          this.loadBitmap(id,path,args[2]).catch(e=>console.warn('Bitmap load:',e)).finally(()=>{
+          this.loadBitmap(id,path).catch(e=>console.warn('Bitmap load:',e)).finally(()=>{
             if(!this.bitmaps.has(id))return;
             if(!bitmap.ready){bitmap.ready=true;for(const draw of bitmap.pending.splice(0))draw();}
           });
@@ -66,6 +71,42 @@
           const b=this.bitmaps.get(args[0]);
           if(b){this.render();b.ctx.drawImage(this.canvas,0,0);}
           return;
+        }
+        case 'bitmap-copy':{
+          const b=this.bitmaps.get(args[0]),src=this.bitmaps.get(args[1]);
+          if(!b||!src)return;
+          b.ready=false;
+          const copy=()=>{b.ctx.drawImage(src.canvas,0,0);b.ready=true;for(const draw of b.pending.splice(0))draw();};
+          if(src.ready)copy();else src.pending.push(copy);return;
+        }
+        case 'bitmap-hue':{
+          const b=this.bitmaps.get(args[0]),shift=((args[1]%360)+360)%360/60;
+          if(!b||!shift)return;
+          const tint=()=>{
+            const pixels=b.ctx.getImageData(0,0,b.width,b.height),d=pixels.data;
+            for(let i=0;i<d.length;i+=4){
+              const r=d[i],g=d[i+1],blue=d[i+2],max=Math.max(r,g,blue),min=Math.min(r,g,blue),c=max-min;
+              if(!c||!d[i+3])continue;
+              const h=((max===r?(g-blue)/c:max===g?2+(blue-r)/c:4+(r-g)/c)+shift+6)%6;
+              const x=c*(1-Math.abs(h%2-1));
+              d[i]=min+(h<1||h>=5?c:h<2||h>=4?x:0);
+              d[i+1]=min+(h>=1&&h<3?c:h<1||h<4&&h>=3?x:0);
+              d[i+2]=min+(h>=3&&h<5?c:h>=2&&h<3||h>=5?x:0);
+            }
+            b.ctx.putImageData(pixels,0,0);
+          };
+          if(b.ready)tint();else b.pending.push(tint);return;
+        }
+        case 'bitmap-radial-blur':{
+          const [id,angle,count]=args,b=this.bitmaps.get(id);if(!b)return;
+          const steps=Math.max(2,Math.min(100,count|0)),copy=this.canvasOf(b.width,b.height);
+          copy.getContext('2d').drawImage(b.canvas,0,0);
+          const ctx=b.ctx;ctx.save();ctx.clearRect(0,0,b.width,b.height);ctx.translate(b.width/2,b.height/2);
+          ctx.globalCompositeOperation='lighter';ctx.globalAlpha=1/steps;
+          for(let i=0;i<steps;i++){
+            ctx.save();ctx.rotate((i/(steps-1)-0.5)*angle*Math.PI/180);ctx.drawImage(copy,-b.width/2,-b.height/2);ctx.restore();
+          }
+          ctx.restore();return;
         }
         case 'bitmap-blur':{
           const b=this.bitmaps.get(args[0]);if(!b)return;
@@ -91,10 +132,11 @@
             b.ctx.fillStyle=gradient;b.ctx.fillRect(x,y,w,h);}return;
         }
         case 'bitmap-text':{
-          const [id,x,y,w,h,text,align,font,size,color]=args,b=this.bitmaps.get(id);
+          const [id,x,y,w,h,text,align,font,size,color,bold,italic,outline,outColor]=args,b=this.bitmaps.get(id);
           if(b){
-            b.ctx.fillStyle=String(color);b.ctx.font=`${size||24}px ${JSON.stringify(String(font||'Arial'))}`;
+            b.ctx.fillStyle=String(color);b.ctx.font=fontStyle(font||'Arial',size||24,bold,italic);
             b.ctx.textBaseline='middle';b.ctx.textAlign=align===1?'center':align===2?'right':'left';
+            if(outline){b.ctx.strokeStyle=outColor;b.ctx.lineWidth=2;b.ctx.lineJoin="round";b.ctx.strokeText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);}
             b.ctx.fillText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);
           }return;
         }
@@ -126,10 +168,11 @@
           return;
         }
         case 'viewport-dispose':this.viewports.delete(args[0]);return;
+        case 'window-cursor':{const s=this.sprites.get(args[0]);if(s)s.cursor=args.slice(1);return;}
         case 'sprite-crop':{
           const sprite=this.sprites.get(args[0]);if(sprite)sprite.crop=args.slice(1);return;
         }
-        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255});return;
+        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
         case 'sprite-set':{
           const [id,key,value]=args,s=this.sprites.get(id);
           if(s&&Object.prototype.hasOwnProperty.call(s,String(key))){s[String(key)]=value;if(key==='bitmap')s.crop=null;}
@@ -150,23 +193,25 @@
     render(){
       const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
-      const sprites=[...this.sprites.values()].sort((a,b)=>layer(a)-layer(b)||a.z-b.z||a.y-b.y);
+      const flashing=t=>t?.flash && (this.frameNumber??0)<t.flash.start+t.flash.duration;
+      const strength=f=>Math.min(1,1-((this.frameNumber??0)-f.start)/f.duration);
+      const overlays=[...this.viewports.values()].filter(v=>v.visible&&flashing(v)&&v.flash.color).map(v=>({overlay:v,z:v.z,top:true}));
+      const sprites=[...this.sprites.values(),...overlays].sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
       for(const s of sprites){
+        if(s.overlay){
+          const v=s.overlay;c.save();c.globalAlpha=strength(v.flash);c.fillStyle=v.flash.color;c.fillRect(...v.rect);c.restore();continue;
+        }
         const b=this.bitmaps.get(s.bitmap);
-        if(!b||!s.visible||Number(s.opacity)<=0)continue;
+        if(!b||!s.visible||(!s.window && Number(s.opacity)<=0))continue;
         const viewport=this.viewports.get(s.viewport);
-        if(s.viewport!==-1 && !viewport?.visible)continue;
+        if(s.viewport!==-1 && !viewport?.visible || flashing(viewport)&&!viewport.flash.color || flashing(s)&&!s.flash.color)continue;
         c.save();
         if(viewport){
           const [vx,vy,vw,vh]=viewport.rect;
           c.beginPath();c.rect(vx,vy,vw,vh);c.clip();c.translate(vx-viewport.ox,vy-viewport.oy);
         }
-        c.globalAlpha=Math.max(0,Math.min(1,Number(s.opacity)/255))*(s.window?Math.max(0,Math.min(1,s.windowOpenness/255)):1);
-        const x=(Number(s.x)||0)-(Number(s.ox)||0),y=(Number(s.y)||0)-(Number(s.oy)||0);
-        if(s.window){
-          c.fillStyle='rgba(10,15,30,0.83)';c.fillRect(x,y,s.windowWidth,s.windowHeight);
-          c.strokeStyle='rgba(220,225,255,0.85)';c.lineWidth=2;c.strokeRect(x+1,y+1,Math.max(0,s.windowWidth-2),Math.max(0,s.windowHeight-2));
-        }
+        if(s.window){this.drawWindow(c,s,b);c.restore();continue;}
+        c.globalAlpha=Math.max(0,Math.min(1,Number(s.opacity)/255));
         const [sx,sy,w,h]=s.crop || [0,0,b.width,b.height];
         if(w>0 && h>0 && s.zoom_x && s.zoom_y){
           if(s.angle || s.mirror){
@@ -174,12 +219,54 @@
           }
           const left=(s.angle||s.mirror?0:s.x)-s.ox*s.zoom_x+(s.window?12:0);
           const top=(s.angle||s.mirror?0:s.y)-s.oy*s.zoom_y+(s.window?12:0);
-          if(s.crop)c.drawImage(b.canvas,sx,sy,w,h,left,top,w*s.zoom_x,h*s.zoom_y);
+          if(flashing(s)&&s.flash.color){
+            const tmp=this.canvasOf(w,h),ctx=tmp.getContext('2d');
+            ctx.drawImage(b.canvas,sx,sy,w,h,0,0,w,h);
+            ctx.globalCompositeOperation='source-atop';ctx.fillStyle=s.flash.color;ctx.globalAlpha=strength(s.flash);ctx.fillRect(0,0,w,h);
+            c.drawImage(tmp,left,top,w*s.zoom_x,h*s.zoom_y);
+          }else if(s.crop)c.drawImage(b.canvas,sx,sy,w,h,left,top,w*s.zoom_x,h*s.zoom_y);
           else c.drawImage(b.canvas,left,top,w*s.zoom_x,h*s.zoom_y);
         }
         c.restore();
       }
       if(this.fadeAlpha){c.fillStyle=`rgba(0,0,0,${Math.max(0,Math.min(1,this.fadeAlpha))})`;c.fillRect(0,0,this.canvas.width,this.canvas.height);}
+    }
+    drawWindow(c,s,b){
+      const w=s.windowWidth,h=s.windowHeight,open=s.windowOpenness/255;
+      if(!w||!h||open<=0)return;
+      c.translate(s.x,s.y);c.beginPath();c.rect(0,(1-open)*h/2,w,open*h);c.clip();
+      const skin=this.bitmaps.get(s.skin),atlas=skin?.ready?skin.canvas:null;
+      if(atlas){
+        c.globalAlpha=s.opacity*s.back_opacity/65025;
+        if(w>4&&h>4){
+          c.drawImage(atlas,0,0,64,64,2,2,w-4,h-4);
+          for(let y=2;y<h-2;y+=64)for(let x=2;x<w-2;x+=64){
+            const rw=Math.min(64,w-2-x),rh=Math.min(64,h-2-y);
+            c.drawImage(atlas,0,64,rw,rh,x,y,rw,rh);
+          }
+        }
+        c.globalAlpha=s.opacity/255;
+        this.drawSlices(c,atlas,64,0,64,16,0,0,w,h,false);
+      }
+      if(open<1)return;
+      c.save();c.beginPath();c.rect(s.padding,s.padding,Math.max(0,w-2*s.padding),Math.max(0,h-s.padding-s.padding_bottom));c.clip();
+      const x=s.padding-s.ox,y=s.padding-s.oy;
+      if(atlas&&s.cursor&&s.cursor[2]>0&&s.cursor[3]>0){
+        c.globalAlpha=.78;this.drawSlices(c,atlas,64,64,32,2,x+s.cursor[0],y+s.cursor[1],s.cursor[2],s.cursor[3],true);
+      }
+      c.globalAlpha=s.contents_opacity/255;c.drawImage(b.canvas,x,y);c.restore();
+      if(atlas&&s.pause){
+        const frame=Math.floor(performance.now()/140)%4;
+        c.globalAlpha=1;c.drawImage(atlas,96+16*(frame%2),64+16*(frame>>1),16,16,(w-16)/2,h-16,16,16);
+      }
+    }
+    drawSlices(c,img,sx,sy,size,border,x,y,w,h,center){
+      const bx=Math.min(border,w/2),by=Math.min(border,h/2);
+      const src=[0,border,size-border,size],dx=[0,bx,w-bx,w],dy=[0,by,h-by,h];
+      for(let j=0;j<3;j++)for(let i=0;i<3;i++){
+        if(!center&&i===1&&j===1)continue;
+        if(dx[i+1]>dx[i]&&dy[j+1]>dy[j])c.drawImage(img,sx+src[i],sy+src[j],src[i+1]-src[i],src[j+1]-src[j],x+dx[i],y+dy[j],dx[i+1]-dx[i],dy[j+1]-dy[j]);
+      }
     }
     drawTiles(id,lowId,highId,ox,oy,frame,visible,sheetIds){
       const tiles=this.tilemaps.get(id),low=this.bitmaps.get(lowId),high=this.bitmaps.get(highId);
@@ -203,10 +290,19 @@
         }
       }
     }
+    setVolume(percent){
+      this.volumePercent=Math.max(0,Math.min(100,percent));
+      if(this.masterGain)this.masterGain.gain.setTargetAtTime(this.volumePercent/100,this.audioContext.currentTime,0.015);
+    }
     unlockAudio(){
       const AudioContext=root.AudioContext || root.webkitAudioContext;
       if(!AudioContext)return;
-      this.audioContext ??= new AudioContext();
+      if(!this.audioContext){
+        this.audioContext=new AudioContext();
+        this.masterGain=this.audioContext.createGain();
+        this.masterGain.gain.value=this.volumePercent/100;
+        this.masterGain.connect(this.audioContext.destination);
+      }
       if(this.audioContext.state==='suspended')this.audioContext.resume().catch(console.warn);
     }
     stopChannel(slot,ms=0){
@@ -237,7 +333,7 @@
       node.buffer=buffer;node.loop=slot==='bgm'||slot==='bgs';
       node.playbackRate.value=Math.max(0.01,pitch/100);
       gain.gain.value=Math.max(0,Math.min(1,volume/100));
-      node.connect(gain);gain.connect(ctx.destination);
+      node.connect(gain);gain.connect(this.masterGain);
       const voices=this.channels.get(slot)||new Set(),voice={node,gain};
       this.channels.set(slot,voices);voices.add(voice);
       node.onended=()=>{voices.delete(voice);node.disconnect();gain.disconnect();};

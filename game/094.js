@@ -118,7 +118,7 @@
       if ($truthy($rb_ge(self.status_window.$pending_index(), 0))) {
         
         $gvars.game_party.$swap_order(self.status_window.$index(), self.status_window.$pending_index());
-        self.status_window['$pending_index='](1);
+        self.status_window['$pending_index='](-1);
         self.status_window.$redraw_item(self.status_window.$index());
       } else {
         self.status_window['$pending_index='](self.status_window.$index())
@@ -130,7 +130,7 @@
 
       if ($truthy($rb_ge(self.status_window.$pending_index(), 0))) {
         
-        self.status_window['$pending_index='](1);
+        self.status_window['$pending_index='](-1);
         return self.status_window.$activate();
       } else {
         

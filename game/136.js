@@ -60,8 +60,8 @@
       var $a, self = this;
 
       
-      if (index == null) index = 1;
-      if ($eqeq(index, 1)) {
+      if (index == null) index = -1;
+      if ($eqeq(index, -1)) {
         return $send(self.unselectable_enemys, 'map!', [], $return_val(false))
       } else {
         return ($a = [index, false], $send(self.unselectable_enemys, '[]=', $a), $a[$a.length - 1])
@@ -102,7 +102,7 @@
             if ($gvars.game_troop == null) $gvars.game_troop = nil;
 
       
-      if (index == null) index = 1;
+      if (index == null) index = -1;
       return $gvars.game_troop.$selectable_enemy(index);
     }, -1)
   })($nesting[0], null);

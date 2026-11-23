@@ -94,9 +94,9 @@
       self.origin_oy = self.owner.$oy();
       self.x = $rb_minus(self.$rand($rb_plus($$('Graphics').$width(), 192)), 96);
       self.y = $rb_minus(self.$rand($rb_plus($$('Graphics').$height(), 192)), 96);
-      self.angle_speed = $rb_times($rb_divide(self.$rand(7), 10), ($truthy(self.$rand(2)['$zero?']()) ? (1) : (1)));
-      self.vector_x = ($truthy(self.$rand(2)['$zero?']()) ? (1) : (1));
-      self.vector_y = ($truthy(self.$rand(2)['$zero?']()) ? (1) : (1));
+      self.angle_speed = $rb_times($rb_divide(self.$rand(7), 10), ($truthy(self.$rand(2)['$zero?']()) ? (1) : (-1)));
+      self.vector_x = ($truthy(self.$rand(2)['$zero?']()) ? (1) : (-1));
+      self.vector_y = ($truthy(self.$rand(2)['$zero?']()) ? (1) : (-1));
       return self.$create_sprite();
     });
     
@@ -185,8 +185,8 @@
       var $a, self = this, $binary_op_recvr_tmp_13 = nil, $binary_op_recvr_tmp_14 = nil, $binary_op_recvr_tmp_15 = nil, $binary_op_recvr_tmp_16 = nil;
 
       
-      if ($truthy($rb_lt(self.sprites['$[]'](0).$x(), 96))) {
-        while ($truthy($rb_lt(self.sprites['$[]'](0).$x(), 96))) {
+      if ($truthy($rb_lt(self.sprites['$[]'](0).$x(), -96))) {
+        while ($truthy($rb_lt(self.sprites['$[]'](0).$x(), -96))) {
         self.sprites['$[]'](0)['$x=']((($binary_op_recvr_tmp_13 = self.sprites['$[]'](1)), ($a = [$rb_plus($binary_op_recvr_tmp_13.$x(), $rb_plus($$('Graphics').$width(), 192))], $send($binary_op_recvr_tmp_13, 'x=', $a), $a[$a.length - 1])))
         }
       } else if ($truthy($rb_gt(self.sprites['$[]'](0).$x(), $rb_plus($$('Graphics').$width(), 96)))) {
@@ -194,8 +194,8 @@
         self.sprites['$[]'](0)['$x=']((($binary_op_recvr_tmp_14 = self.sprites['$[]'](1)), ($a = [$rb_minus($binary_op_recvr_tmp_14.$x(), $rb_plus($$('Graphics').$width(), 192))], $send($binary_op_recvr_tmp_14, 'x=', $a), $a[$a.length - 1])))
         }
       };
-      if ($truthy($rb_lt(self.sprites['$[]'](0).$y(), 96))) {
-        while ($truthy($rb_lt(self.sprites['$[]'](0).$y(), 96))) {
+      if ($truthy($rb_lt(self.sprites['$[]'](0).$y(), -96))) {
+        while ($truthy($rb_lt(self.sprites['$[]'](0).$y(), -96))) {
         self.sprites['$[]'](0)['$y=']((($binary_op_recvr_tmp_15 = self.sprites['$[]'](1)), ($a = [$rb_plus($binary_op_recvr_tmp_15.$y(), $rb_plus($$('Graphics').$height(), 192))], $send($binary_op_recvr_tmp_15, 'y=', $a), $a[$a.length - 1])))
         }
       } else if ($truthy($rb_gt(self.sprites['$[]'](0).$y(), $rb_plus($$('Graphics').$height(), 96)))) {

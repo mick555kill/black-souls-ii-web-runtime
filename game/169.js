@@ -177,7 +177,7 @@
           return 3
         }
       } else {
-        return 1
+        return -1
       }
     });
     
@@ -293,7 +293,7 @@
       self.reaction_after_frequency = 0;
       self.reaction_balloon_id = 0;
       self.unpassable_region = [];
-      self.contact_index = 1;
+      self.contact_index = -1;
       return (self.contact_condition = 0);
     });
     
@@ -428,7 +428,7 @@
       if ($gvars.game_player == null) $gvars.game_player = nil;
 
       
-      self.contact_index = 1;
+      self.contact_index = -1;
       self.contact_condition = 0;
       if ($truthy(self['$contact?']($gvars.game_player))) {
         self.contact_index = 0
@@ -458,7 +458,7 @@
 
       
       position = self.$positional_relationship($gvars.game_player);
-      if ($eqeq(position, 1)) {
+      if ($eqeq(position, -1)) {
         return 0
       } else 
       switch (self.$direction()) {

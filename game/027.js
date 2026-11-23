@@ -346,24 +346,24 @@
     
     $def(self, '$x_with_direction', function $$x_with_direction(x, d) {
       
-      return $rb_plus(x, ($eqeq(d, 6) ? (1) : ($eqeq(d, 4) ? (1) : (0))))
+      return $rb_plus(x, ($eqeq(d, 6) ? (1) : ($eqeq(d, 4) ? (-1) : (0))))
     });
     
     $def(self, '$y_with_direction', function $$y_with_direction(y, d) {
       
-      return $rb_plus(y, ($eqeq(d, 2) ? (1) : ($eqeq(d, 8) ? (1) : (0))))
+      return $rb_plus(y, ($eqeq(d, 2) ? (1) : ($eqeq(d, 8) ? (-1) : (0))))
     });
     
     $def(self, '$round_x_with_direction', function $$round_x_with_direction(x, d) {
       var self = this;
 
-      return self.$round_x($rb_plus(x, ($eqeq(d, 6) ? (1) : ($eqeq(d, 4) ? (1) : (0)))))
+      return self.$round_x($rb_plus(x, ($eqeq(d, 6) ? (1) : ($eqeq(d, 4) ? (-1) : (0)))))
     });
     
     $def(self, '$round_y_with_direction', function $$round_y_with_direction(y, d) {
       var self = this;
 
-      return self.$round_y($rb_plus(y, ($eqeq(d, 2) ? (1) : ($eqeq(d, 8) ? (1) : (0)))))
+      return self.$round_y($rb_plus(y, ($eqeq(d, 2) ? (1) : ($eqeq(d, 8) ? (-1) : (0)))))
     });
     
     $def(self, '$autoplay', function $$autoplay() {
@@ -595,7 +595,7 @@
       if ($truthy($rb_ge(self.$tile_id(x, y, z), 2048))) {
         return $rb_divide($rb_minus(self.$tile_id(x, y, z), 2048), 48)
       } else {
-        return 1
+        return -1
       }
     });
     

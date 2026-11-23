@@ -26,7 +26,7 @@
 
         
         if (index == null) index = nil;
-        return self.data.$push($$('Game_Follower').$new(index, self.data['$[]'](1)));}, {$$s: self});
+        return self.data.$push($$('Game_Follower').$new(index, self.data['$[]'](-1)));}, {$$s: self});
     });
     
     $def(self, '$[]', function $Game_Followers_$$$2(index) {

@@ -47,9 +47,9 @@
       };
       action = $$('Game_Action').$new(self);
       action.$set_skill(sid);
-      if ($eqeq(ti, 2)) {
+      if ($eqeq(ti, -2)) {
         action['$target_index='](self.$last_target_index())
-      } else if ($eqeq(ti, 1)) {
+      } else if ($eqeq(ti, -1)) {
         action.$decide_random_target()
       } else {
         action['$target_index='](ti)

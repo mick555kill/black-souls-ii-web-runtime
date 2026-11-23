@@ -173,7 +173,7 @@
       if ($post_args.length > 1) text = $post_args.shift();if (text == null) text = "";
       
       value = $post_args.shift();if (value == null) value = nil;
-      $send2(self, $find_super(self, 'initialize', $$initialize, false, true), 'initialize', [16, 0, $rb_plus(640, 32), $rb_plus(38, 32)], null);
+      $send2(self, $find_super(self, 'initialize', $$initialize, false, true), 'initialize', [-16, 0, $rb_plus(640, 32), $rb_plus(38, 32)], null);
       self['$z=']($$('Z'));
       self['$contents_opacity='](0);
       self['$back_opacity='](0);
@@ -185,7 +185,7 @@
         self.i = $gvars.game_temp.$getinfo_size().$size()
       };
       if ($eqeq($$('Y_TYPE'), 0)) {
-        self['$y=']($rb_plus(14, $rb_times(self.i, 40)))
+        self['$y=']($rb_plus(-14, $rb_times(self.i, 40)))
       } else {
         self['$y=']($rb_minus($rb_minus(480, 58), $rb_times(self.i, 40)))
       };
@@ -194,7 +194,7 @@
       if ($eqeqeq($range(0, 3, false), ($ret_or_1 = type))) {
         if ($truthy($rb_ge(self.value, 1))) {
           return $$('INFO_SE').$play()
-        } else if ($truthy($rb_le(self.value, 1))) {
+        } else if ($truthy($rb_le(self.value, -1))) {
           return nil
         } else {
           return nil
@@ -202,7 +202,7 @@
       } else if ($eqeqeq(4, $ret_or_1)) {
         if ($truthy($rb_ge(id, 1))) {
           return $$('Audio').$se_play("Audio/SE/magic1", 80, 80)
-        } else if ($truthy($rb_le(id, 1))) {
+        } else if ($truthy($rb_le(id, -1))) {
           return nil
         } else {
           return nil
@@ -212,7 +212,7 @@
       } else if ($eqeqeq(6, $ret_or_1)) {
         if ($truthy($rb_ge(self.value, 1))) {
           return $$('INFO_SE').$play()
-        } else if ($truthy($rb_le(self.value, 1))) {
+        } else if ($truthy($rb_le(self.value, -1))) {
           return nil
         } else {
           return nil
@@ -333,7 +333,7 @@
       if ((($truthy($rb_le(type, 2)) && ($truthy($$('GET')))) && ($truthy($rb_ge(self.value, 1))))) {
         $gvars.game_party.$gain_item(data, self.value)
       };
-      if ((($truthy($rb_le(type, 2)) && ($truthy($$('GET')))) && ($truthy($rb_le(self.value, 1))))) {
+      if ((($truthy($rb_le(type, 2)) && ($truthy($$('GET')))) && ($truthy($rb_le(self.value, -1))))) {
         $gvars.game_party.$gain_item(data, self.value)
       };
       return $$('Graphics').$frame_reset();
@@ -434,7 +434,7 @@
         } else {
           return $gvars.game_party.$gain_gold(value)
         }
-      } else if ($truthy($rb_le(value, 1))) {
+      } else if ($truthy($rb_le(value, -1))) {
         if ($truthy($gvars.game_switches['$[]']($$$($$('CUSTOM_GET_WINDOW'), 'DISPLAY_FLAG')))) {
           
           type = 4;
@@ -471,7 +471,7 @@
         } else {
           return $gvars.game_party.$gain_item($gvars.data_items['$[]'](self.params['$[]'](0)), value)
         }
-      } else if ($truthy($rb_le(value, 1))) {
+      } else if ($truthy($rb_le(value, -1))) {
         if ($truthy($gvars.game_switches['$[]']($$$($$('CUSTOM_GET_WINDOW'), 'DISPLAY_FLAG')))) {
           
           type = 0;
@@ -508,7 +508,7 @@
         } else {
           return $gvars.game_party.$gain_item($gvars.data_weapons['$[]'](self.params['$[]'](0)), value, self.params['$[]'](4))
         }
-      } else if ($truthy($rb_le(value, 1))) {
+      } else if ($truthy($rb_le(value, -1))) {
         if ($truthy($gvars.game_switches['$[]']($$$($$('CUSTOM_GET_WINDOW'), 'DISPLAY_FLAG')))) {
           
           type = 1;
@@ -545,7 +545,7 @@
         } else {
           return $gvars.game_party.$gain_item($gvars.data_armors['$[]'](self.params['$[]'](0)), value, self.params['$[]'](4))
         }
-      } else if ($truthy($rb_le(value, 1))) {
+      } else if ($truthy($rb_le(value, -1))) {
         if ($truthy($gvars.game_switches['$[]']($$$($$('CUSTOM_GET_WINDOW'), 'DISPLAY_FLAG')))) {
           
           type = 2;
@@ -596,7 +596,7 @@
           id = self.params['$[]'](3);
           actor_name = $gvars.data_actors['$[]'](self.params['$[]'](1)).$name();
           text = $rb_plus($rb_plus(actor_name, " / "), $$$($$('CUSTOM_GET_WINDOW'), 'SKILL_TEXT_REMOVE'));
-          value = 1;
+          value = -1;
           e = $gvars.game_temp.$streffect();
           return e.$push($$('Window_Getinfo').$new(id, type, text, value));
         } else {
@@ -636,8 +636,8 @@
         } else if ($eqeq(self.params['$[]'](2), 1)) {
           
           text = $rb_plus($rb_plus(actor_name, " / "), $$$($$('CUSTOM_GET_WINDOW'), 'EXP_TEXT_REMOVE'));
-          value = 1;
-          id = $rb_times(self.params['$[]'](4), 1);
+          value = -1;
+          id = $rb_times(self.params['$[]'](4), -1);
         };
         e = $gvars.game_temp.$streffect();
         return e.$push($$('Window_Getinfo').$new(id, type, text, value));

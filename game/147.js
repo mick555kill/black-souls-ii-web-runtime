@@ -316,7 +316,7 @@
       if ($gvars.game_troop == null) $gvars.game_troop = nil;
 
       
-      mode = ($truthy(self.preemptive) ? (1) : (($truthy(self.surprise) ? (1) : (0))));
+      mode = ($truthy(self.preemptive) ? (1) : (($truthy(self.surprise) ? (-1) : (0))));
       $send($gvars.game_party.$members(), 'each', [], function $$7(member){
         
         if (member == null) member = nil;
@@ -324,7 +324,7 @@
       return $send($gvars.game_troop.$members(), 'each', [], function $$8(member){
         
         if (member == null) member = nil;
-        return member.$make_start_ap($rb_times(mode, 1));});
+        return member.$make_start_ap($rb_times(mode, -1));});
     });
     $defs(self, '$check_members', function $$check_members() {
             if ($gvars.game_party == null) $gvars.game_party = nil;

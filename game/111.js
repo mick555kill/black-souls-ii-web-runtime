@@ -76,7 +76,7 @@
       if ($eqeq(s['$[]'](0, 0), "-")) {
         
         s = s.$gsub("-", "");
-        return $rb_times(s.$to_i(), 1);
+        return $rb_times(s.$to_i(), -1);
       } else {
         return s.$to_i()
       }

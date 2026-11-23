@@ -94,7 +94,7 @@
         
         if (i == null) i = nil;
         self.sunshine_sprites['$<<']($$('Sprite').$new(self.viewport));
-        self.sunshine_sprites['$[]'](i)['$y='](180);
+        self.sunshine_sprites['$[]'](i)['$y='](-180);
         return ($a = [1], $send(self.sunshine_sprites['$[]'](i), 'blend_type=', $a), $a[$a.length - 1]);}, {$$s: self});
       self.sunshine_sprites['$[]'](0)['$opacity='](150);
       self.sunshine_sprites['$[]'](1)['$opacity='](0);

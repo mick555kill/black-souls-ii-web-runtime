@@ -45,8 +45,9 @@
       const key = `${folder}/${name}`;
       if (this.imageCache.has(key)) return this.imageCache.get(key);
       const promise = (async () => {
-        for (const ext of IMG_EXT) {
-          const path = `Graphics/${folder}/${name}.${ext}`;
+        const candidates=/\.(png|jpe?g)$/i.test(name)?[name]:IMG_EXT.map(ext=>name+'.'+ext);
+        for (const file of candidates) {
+          const path = `Graphics/${folder}/${file}`;
           if (!this.source.has(path)) continue;
           try { return await this.decode(await this.source.read(path, 32 * 1024 * 1024)); } catch { /* try next extension */ }
         }

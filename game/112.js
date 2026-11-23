@@ -77,7 +77,7 @@
           return self.$choice_eval((($a = $gvars['~']) === nil ? nil : $a['$[]'](1)))
         };}, {$$s: self}));
       if ($truthy($gvars.game_message.$choices()['$empty?']())) {
-        return ($a = [self.indent, 1], $send(self.branch, '[]=', $a), $a[$a.length - 1])
+        return ($a = [self.indent, -1], $send(self.branch, '[]=', $a), $a[$a.length - 1])
       } else {
         
         m = result.$index($rb_minus($gvars.game_message.$choice_cancel_type(), 1));

@@ -46,7 +46,7 @@
       self.$contents().$clear();
       text = $gvars.game_variables['$[]']($$$($$('Prico'), 'Var_Num'));
       self.$contents().$font()['$color='](self.$system_color());
-      self.$contents().$draw_text(0, 2, $rb_plus(self.$width(), 28), self.$line_height(), $$$($$('Prico'), 'Var_Prefix'), 0);
+      self.$contents().$draw_text(0, -2, $rb_plus(self.$width(), 28), self.$line_height(), $$$($$('Prico'), 'Var_Prefix'), 0);
       self.$contents().$draw_text(0, $rb_minus(self.$line_height(), 4), 138, self.$line_height(), $$$($$('Prico'), 'Var_Suffix'), 2);
       self.$contents().$font()['$color='](self.$normal_color());
       return self.$contents().$draw_text(0, $rb_minus(self.$line_height(), 4), $rb_minus(128, $$$($$('Prico'), 'Num_Adj')), self.$line_height(), text, 2);

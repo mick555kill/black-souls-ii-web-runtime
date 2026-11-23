@@ -41,7 +41,7 @@
           if ($not(s.$icon_index()['$zero?']())) {
             
             is_turn = ($truthy(($ret_or_1 = s.$auto_removal_timing()['$zero?']()['$!']())) ? (s.$priority()['$zero?']()['$!']()) : ($ret_or_1));
-            turn = ($truthy(is_turn) ? (self.state_turns['$[]'](s.$id()).$truncate()) : (1));
+            turn = ($truthy(is_turn) ? (self.state_turns['$[]'](s.$id()).$truncate()) : (-1));
             return turns.$push(turn);
           } else {
             return nil
@@ -89,7 +89,7 @@
           if (n == null) n = nil;
           if (i == null) i = nil;
           self.$draw_icon(n, $rb_plus(x, $rb_times(24, i)), y);
-          if (($truthy($gvars.game_party.$in_battle()) && ($neqeq(turns['$[]'](i), 1)))) {
+          if (($truthy($gvars.game_party.$in_battle()) && ($neqeq(turns['$[]'](i), -1)))) {
             return self.$draw_text($rb_plus(x, $rb_times(24, i)), y, 24, self.$line_height(), $rb_plus(turns['$[]'](i), 1), 2)
           } else {
             return nil

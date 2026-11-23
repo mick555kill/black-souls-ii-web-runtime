@@ -4,6 +4,7 @@ if(!dir)throw Error('Usage: node playtest.cjs path/to/Game.rgss3a');
 require('./vendor/opal.js');require('./vendor/compiler.js');require('./game/manifest.js');require('./adapters/generated.js');
 const load=file=>vm.runInThisContext(fs.readFileSync(file,'utf8'),{filename:file});
 load('web/host.js');
+load('web/images.js');
 for(const file of ['adapters/graphics.js','adapters/rgss3-rpg-classes.js',...gameScripts.filter(s=>s.name!=='Main').map(s=>'game/'+s.file)])new Function('self',fs.readFileSync(file,'utf8'))(Opal.top);
 for(const file of ['archive','assets','marshal','project','data'])load('web/'+file+'.js');
 (async()=>{

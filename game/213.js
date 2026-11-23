@@ -2,7 +2,7 @@
   var $gvars = Opal.gvars, $truthy = Opal.truthy, $hash2 = Opal.hash2, $klass = Opal.klass, $def = Opal.def, $alias = Opal.alias, $send2 = Opal.send2, $find_super = Opal.find_super, $rb_minus = Opal.rb_minus, $const_set = Opal.const_set, $rb_plus = Opal.rb_plus, $rb_divide = Opal.rb_divide, $send = Opal.send, $nesting = self.$$is_a_module ? [self] : [self.$$class], $$ = Opal.$r($nesting), nil = Opal.nil, $ret_or_1 = nil;
   if ($gvars.rsi == null) $gvars.rsi = nil;
 
-  Opal.add_stubs('[]=,attr_accessor,start_noise,end_noise,initialize,r_noise_effect_initialize,bitmap=,system,visible=,blend_type=,update,x=,-,rand,width,bitmap,opacity=,^,[],size,min,max,+,x,y=,height,opacity,zero?,zoom_x=,/,next,zoom_y=,angle=,create_noise,r_noise_effect,new,z=,z,<<,dispose,each,%,frame_count,r_noise_effect_spriteset=,r_noise_effect_dispose,dispose_noise,r_noise_effect_update,update_noise_effect');
+  Opal.add_stubs('[]=,attr_accessor,start_noise,end_noise,initialize,r_noise_effect_initialize,bitmap=,system,visible=,blend_type=,update,x=,-@,rand,-,width,bitmap,opacity=,^,[],size,min,max,+,x,y=,height,opacity,zero?,zoom_x=,/,next,zoom_y=,angle=,create_noise,r_noise_effect,new,z=,z,<<,dispose,each,%,frame_count,r_noise_effect_spriteset=,r_noise_effect_dispose,dispose_noise,r_noise_effect_update,update_noise_effect');
   
   $gvars.rsi = ($truthy(($ret_or_1 = $gvars.rsi)) ? ($ret_or_1) : ($hash2([], {})));
   $gvars.rsi['$[]=']("スクリーンノイズ", true);
@@ -100,7 +100,7 @@
       var self = this;
 
       
-      self['$x=']($rb_minus(self.$rand($rb_minus(self.$bitmap().$width(), 544)), ));
+      self['$x='](self.$rand($rb_minus(self.$bitmap().$width(), 544))['$-@']());
       self['$opacity='](($truthy(self.blink) ? (230) : (255)));
       return (self.blink = self.blink['$^'](true));
     });
@@ -112,8 +112,8 @@
 
     $proto.vector_x = $proto.opacity_speed = nil;
     
-    $const_set($nesting[0], 'VX', [2, 1, 1, 0, 1, 1, 2]);
-    $const_set($nesting[0], 'OS', [50, 20, 10, 0, 10, 20, 30, 50]);
+    $const_set($nesting[0], 'VX', [-2, -1, -1, 0, 1, 1, 2]);
+    $const_set($nesting[0], 'OS', [-50, -20, -10, 0, 10, 20, 30, 50]);
     
     $def(self, '$initialize', function $$initialize(viewport, start_x) {
       var $yield = $$initialize.$$p || nil, self = this;
@@ -133,7 +133,7 @@
 
       
       self['$x=']([[$rb_plus(self.$x(), self.vector_x), 0].$max(), 640].$min());
-      self['$y=']($rb_minus(self.$rand($rb_minus(self.$bitmap().$height(), 480)), ));
+      self['$y='](self.$rand($rb_minus(self.$bitmap().$height(), 480))['$-@']());
       self['$opacity=']($rb_plus(self.$opacity(), self.opacity_speed));
       if ($truthy(self.$rand(6)['$zero?']())) {
         self.vector_x = $$('VX')['$[]'](self.$rand($$('VX').$size()))

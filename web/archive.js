@@ -16,8 +16,8 @@
     async u32() { const b = await this.bytes(4); return (b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24) >>> 0; }
   }
   function decodePath(bytes) {
-    try { return new TextDecoder('shift_jis', { fatal: true }).decode(bytes); }
-    catch { return new TextDecoder('utf-8').decode(bytes); }
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch { return new TextDecoder('shift_jis').decode(bytes); }
   }
   class RGSS3Archive {
     constructor(file, entries) { this.file = file; this.entries = entries; this.lookup = new Map(entries.map(x => [x.name.toLowerCase(), x])); }
@@ -55,7 +55,10 @@
       const entry = this.lookup.get(name.replace(/\\/g, '/').toLowerCase());
       if (!entry) throw Error(`File not found: ${name}`);
       if (entry.size > maxBytes) throw Error(`File exceeds per-read memory limit: ${name}`);
-      const data = new Uint8Array(await this.file.slice(entry.offset, entry.offset + entry.size).arrayBuffer());
+      return this.readPrefix(entry,entry.size);
+    }
+    async readPrefix(entry,size) {
+      const data = new Uint8Array(await this.file.slice(entry.offset, entry.offset + Math.min(size,entry.size)).arrayBuffer());
       let key = entry.key;
       for (let i = 0; i < data.length; i++) {
         data[i] ^= (key >>> (8 * (i % 4))) & 255;

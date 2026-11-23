@@ -2,7 +2,7 @@
   var $gvars = Opal.gvars, $truthy = Opal.truthy, $hash2 = Opal.hash2, $klass = Opal.klass, $def = Opal.def, $alias = Opal.alias, $send2 = Opal.send2, $find_super = Opal.find_super, $rb_minus = Opal.rb_minus, $send = Opal.send, $rb_plus = Opal.rb_plus, $nesting = self.$$is_a_module ? [self] : [self.$$class], $$ = Opal.$r($nesting), nil = Opal.nil, $ret_or_1 = nil;
   if ($gvars.rsi == null) $gvars.rsi = nil;
 
-  Opal.add_stubs('[]=,attr_accessor,start_signal,end_signal,initialize,signal_display_initialize,bitmap=,system,visible=,update,x=,-,rand,width,bitmap,y=,height,opacity=,^,dispose,viewport,oy=,+,oy,create_signal,signal_display,new,z=,next,z,zero?,%,frame_count,signal_display_set=,signal_display_dispose,dispose_signal,signal_display_update,update_signal_display');
+  Opal.add_stubs('[]=,attr_accessor,start_signal,end_signal,initialize,signal_display_initialize,bitmap=,system,visible=,update,x=,-@,rand,-,width,bitmap,y=,height,opacity=,^,dispose,viewport,oy=,+,oy,create_signal,signal_display,new,z=,next,z,zero?,%,frame_count,signal_display_set=,signal_display_dispose,dispose_signal,signal_display_update,update_signal_display');
   
   $gvars.rsi = ($truthy(($ret_or_1 = $gvars.rsi)) ? ($ret_or_1) : ($hash2([], {})));
   $gvars.rsi['$[]=']("シグナルディスプレイ", true);
@@ -100,8 +100,8 @@
       var self = this;
 
       
-      self['$x=']($rb_minus(self.$rand($rb_minus(self.$bitmap().$width(), 544)), ));
-      self['$y=']($rb_minus(self.$rand($rb_minus(self.$bitmap().$height(), 416)), ));
+      self['$x='](self.$rand($rb_minus(self.$bitmap().$width(), 544))['$-@']());
+      self['$y='](self.$rand($rb_minus(self.$bitmap().$height(), 416))['$-@']());
       self['$opacity='](($truthy(self.blink) ? (230) : (255)));
       return (self.blink = self.blink['$^'](true));
     });

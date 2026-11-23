@@ -57,7 +57,7 @@
       var self = this;
 
       if ($truthy(self.out_cursor)) {
-        return self.$select_out_cursor(1)
+        return self.$select_out_cursor(-1)
       } else {
         return self.$select_out_cursor(index)
       }
@@ -71,7 +71,7 @@
 
       
       if (wrap == null) wrap = false;
-      if ($eqeq(self.index, 1)) {
+      if ($eqeq(self.index, -1)) {
         self.index = 0
       };
       return self.$cursor_up_out_cursor(wrap);
@@ -83,7 +83,7 @@
       var self = this;
 
       
-      if (($eqeq(self.$index(), 1) && ($truthy($$$($$('OUT_CURSOR'), 'TYPE1'))))) {
+      if (($eqeq(self.$index(), -1) && ($truthy($$$($$('OUT_CURSOR'), 'TYPE1'))))) {
         return nil
       };
       return self.$process_ok_out_cursor();

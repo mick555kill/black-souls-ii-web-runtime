@@ -132,7 +132,7 @@
     $def(self, '$last_text', function $$last_text() {
       var self = this;
 
-      return self.lines['$[]'](1)
+      return self.lines['$[]'](-1)
     });
     
     $def(self, '$refresh', function $$refresh() {

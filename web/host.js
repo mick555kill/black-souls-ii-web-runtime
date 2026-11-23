@@ -1,46 +1,33 @@
 let nextGraphicsId=1;
 const heldKeys=new Set();let lastKeys=new Set(),sampledKeys=new Set(),heldFrames=new Map();
-const pendingPresses = new Set();
-function pressKey(key) {
-  if (!heldKeys.has(key)) pendingPresses.add(key);
-  heldKeys.add(key);
-}
-function clearInput() {
-  heldKeys.clear(); pendingPresses.clear();
-  lastKeys.clear(); sampledKeys.clear(); heldFrames.clear();
-}
-let triggeredKeys = new Set();
 function inputName(key){
   return ({DOWN:'down',LEFT:'left',RIGHT:'right',UP:'up',C:'ok',B:'cancel',A:'shift',SHIFT:'shift',X:'a',Y:'s',Z:'d'})[String(key).toUpperCase()]||String(key).toLowerCase();
 }
 function sendRGSS(op,args){ if(globalThis.display)display.handle({op,args}); }
-const hostMethods={frame(){},
+const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
+  flash:(type,id,color,duration,start)=>sendRGSS('flash',[type,id,color===Opal.nil?null:color,duration,start]),
   resize:(w,h)=>sendRGSS('resize',[w,h]),
   fade:(alpha,duration)=>sendRGSS('fade',[alpha,duration]),
   inputUpdate(){
     lastKeys=sampledKeys;
-    triggeredKeys = new Set(pendingPresses);
-    sampledKeys=new Set([...heldKeys, ...pendingPresses]);
-    pendingPresses.clear();
+    sampledKeys=new Set(heldKeys);
     for(const key of sampledKeys)heldFrames.set(key,(heldFrames.get(key)||0)+1);
     for(const key of [...heldFrames.keys()])if(!sampledKeys.has(key))heldFrames.delete(key);
   },
   inputPress:key=>sampledKeys.has(inputName(key)),
-  inputTrigger:key=>sampledKeys.has(inputName(key))&&(triggeredKeys.has(inputName(key))||!lastKeys.has(inputName(key))),
+  inputTrigger:key=>sampledKeys.has(inputName(key))&&!lastKeys.has(inputName(key)),
   inputRepeat:key=>{
     const n=heldFrames.get(inputName(key))||0;
     return n===1||(n>=24&&n%6===0);
   },
   inputDir4(){for(const [name,d] of [['down',2],['left',4],['right',6],['up',8]])if(sampledKeys.has(name))return d;return 0;},
-  inputDir8(){
-    const x=Number(sampledKeys.has('right'))-Number(sampledKeys.has('left'));
-    const y=Number(sampledKeys.has('down'))-Number(sampledKeys.has('up'));
-    return x||y ? 5+x-3*y : 0;
-  },
   audio:(...args)=>sendRGSS('audio',args),
   bitmapCreate(w,h){const id=nextGraphicsId++;sendRGSS('bitmap-create',[id,w,h]);return id;},
-  bitmapLoad(name,bitmap){const id=nextGraphicsId++;sendRGSS('bitmap-load',[id,name,bitmap]);return id;},
+  bitmapLoad(name){const id=nextGraphicsId++;sendRGSS('bitmap-load',[id,name]);return id;},
   bitmapDispose:id=>sendRGSS('bitmap-dispose',[id]),
+  bitmapCopy:(...a)=>sendRGSS('bitmap-copy',a),
+  bitmapHue:(...a)=>sendRGSS('bitmap-hue',a),
+  bitmapRadialBlur:(...args)=>sendRGSS('bitmap-radial-blur',args),
   bitmapBlur:id=>sendRGSS('bitmap-blur',[id]),
   bitmapSnapshot:id=>sendRGSS('bitmap-snapshot',[id]),
   bitmapClearRect:(...args)=>sendRGSS('bitmap-clear-rect',args),
@@ -77,3 +64,5 @@ rgssHost.$tileCells=function(id,kind,w,h,d,cells){
  cells.forEach((n,i)=>v.setInt16(20+2*i,n,true));
  sendRGSS('tile-table',[id,kind,raw]);
 };
+
+rgssHost.$windowCursor=(...args)=>sendRGSS('window-cursor',args);

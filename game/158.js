@@ -142,7 +142,7 @@
       self['$x=']($rb_minus(x, $rb_divide(self.gauge_width, 2)));
       self['$y=']($rb_minus(y, self.gauge_high));
       self['$y=']($rb_plus(self.$y(), $$$($$('ATB'), 'ENEMY_GAUGE_POS_DATA')['$[]'](self.gauge_number)));
-      return ($a = [$rb_plus(self.battler_sprite.$z(), ($truthy(self.front_flag) ? (1) : (1)))], $send(self, 'z=', $a), $a[$a.length - 1]);
+      return ($a = [$rb_plus(self.battler_sprite.$z(), ($truthy(self.front_flag) ? (1) : (-1)))], $send(self, 'z=', $a), $a[$a.length - 1]);
     });
     
     $def(self, '$clear', function $$clear() {
