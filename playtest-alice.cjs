@@ -28,13 +28,13 @@ const cmd=(await project.loadMap(7)).events[1].pages.find(p=>p.list.some(c=>c.co
 g.game_map.interpreter.$setup(rubyValue(cmd.slice(cmd.findIndex(c=>c.code===201&&c.parameters[1]===110)-1)),1);
 Opal.Graphics['$brightness='](0);
 let last, selected=false;
-for(let i=0;i<1200;i++){
+for(let i=0;i<12000;i++){
  await frame();
  const w=scene.message_window,c=w.choice_window,m=g.game_message;
  const key=[g.game_map.map_id,m.texts.join('|'),m.choices.join('|'),c.active,c.openness,w.openness,Opal.Graphics.$brightness()].join(';');
  if(last!==key && (i%10===0||c.active&&c.openness===255))console.log(i,key,'Z',w.z,c.z,'VP',c.viewport?.z);
  last=key;
- if(c.active&&c.openness===255){if(m.choices.includes('Mother Alice')){const assert=require('node:assert/strict');
+ if(c.active&&c.openness===255){if(m.texts.join(' ').includes('Skip the prologue'))c.$select(1);if(m.choices.includes('Mother Alice')){const assert=require('node:assert/strict');
  const picture=scene.spriteset.picture_sprites.find(s=>s?.picture?.name==='black');
  assert.ok(picture,'expected the actual black backdrop');
  const layer=s=>s.viewport===Opal.nil?s.z:s.viewport.z;
@@ -42,7 +42,19 @@ for(let i=0;i<1200;i++){
  assert.ok(c.visible&&c.x>=0&&c.y>=0&&c.x+c.width<=640&&c.y+c.height<=480);
  c.$select(Number(process.argv[3]||0));selected=true;}heldKeys.add('ok');await frame();heldKeys.delete('ok');}
  else if(w.pause){heldKeys.add('ok');await frame();heldKeys.delete('ok');}
- if(selected&&g.game_variables['$[]'](8)>0){require('node:assert/strict').equal(g.game_variables['$[]'](8),1+Number(process.argv[3]||0));console.log('SELECTED',g.game_variables['$[]'](8));return;}
+ if(selected && g.game_switches['$[]'](167)){
+  const start=[player.x,player.y];
+  heldKeys.add('down');
+  let stepped=false;
+  for(let n=0;n<240 && g.game_map.map_id===110;n++){
+   await frame();if(g.game_map.map_id===110 && player.y===start[1]+1)stepped=true;
+  }
+  heldKeys.delete('down');
+  const assert=require('node:assert/strict');
+  assert.ok(stepped,'down must move one tile away from the tree');
+  assert.equal(g.game_map.map_id,97,'forest exit must transfer to Map 097');
+  console.log('PASS forest exit',start,player.x,player.y);return;
+ }
 }
-throw Error('Alice choices did not open');
-})().catch(e=>{console.error(String(e.message).slice(0,400),e.stack?.slice(0,500));process.exitCode=1});
+throw Error('Intro never completed');
+})().catch(e=>{console.error(e.stack);process.exitCode=1});

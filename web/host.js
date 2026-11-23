@@ -1,7 +1,10 @@
 let nextGraphicsId=1;
 const heldKeys=new Set();let lastKeys=new Set(),sampledKeys=new Set(),heldFrames=new Map();
+// VX Ace event command 111 stores button IDs, while game scripts use symbols.
+const eventButtons={2:'DOWN',4:'LEFT',6:'RIGHT',8:'UP',11:'A',12:'B',13:'C',14:'X',15:'Y',16:'Z',17:'L',18:'R'};
 function inputName(key){
-  return ({DOWN:'down',LEFT:'left',RIGHT:'right',UP:'up',C:'ok',B:'cancel',A:'shift',SHIFT:'shift',X:'a',Y:'s',Z:'d'})[String(key).toUpperCase()]||String(key).toLowerCase();
+  const name=eventButtons[key] || String(key).toUpperCase();
+  return ({DOWN:'down',LEFT:'left',RIGHT:'right',UP:'up',C:'ok',B:'cancel',A:'shift',SHIFT:'shift',X:'a',Y:'s',Z:'d'})[name]||name.toLowerCase();
 }
 function sendRGSS(op,args){ if(globalThis.display)display.handle({op,args}); }
 const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
