@@ -1,5 +1,14 @@
 // Use the imported game's RGSS windows, Window skin, actor portraits, and vocabulary.
 const G=Opal.gvars;
+// The name keyboard has two banks of five columns separated by 16 pixels.
+const nameKeyboard=Opal.Window_NameInput.$$prototype;
+nameKeyboard.$col_max=()=>10;
+nameKeyboard.$row_max=()=>9;
+nameKeyboard.$item_max=()=>90;
+nameKeyboard.$item_rect=function(index){
+ const column=index%10,row=Math.floor(index/10),height=this.$line_height();
+ return Opal.Rect.$new(column*32+(column>=5?16:0),row*height,32,height);
+};
 function textTokens(text){
  text=String(text).replace(/\\\\/g,'\u0000').replace(/\\N\[(\d+)\]/gi,(_,i)=>G.game_actors['$[]'](+i).$name())
    .replace(/\\P\[(\d+)\]/gi,(_,i)=>G.game_party.$members()[+i-1]?.$name()||'')

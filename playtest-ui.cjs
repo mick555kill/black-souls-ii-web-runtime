@@ -26,7 +26,19 @@ for(let i=0;i<5000;i++){
  await frame();const m=Opal.gvars.game_message, text=m.texts?.join(' '),w=scene.message_window;
  if(text&&text!==last){last=text;console.log(text);}
  if(scene.$$class===Opal.Scene_Title&&i===30)await press();
- if(scene.$$class===Opal.Scene_Name){scene.input_window.$select(0);await press();scene.input_window.$select(89);await press();named=true;}
+ if(scene.$$class===Opal.Scene_Name){const keyboard=scene.input_window, assert=require('node:assert/strict');
+  const height=keyboard.$line_height();
+  for(let i=0;i<keyboard.$item_max();i++){
+   keyboard.$select(i);
+   const rect=keyboard.$item_rect(i),cursor=keyboard.$cursor_rect();
+   assert.equal(rect.y,Math.floor(i/10)*height);
+   assert.equal(rect.x,(i%10)*32+(i%10>=5?16:0));
+   assert.equal(cursor.x,rect.x);assert.equal(cursor.y,rect.y);
+   assert.ok(rect.x+rect.width<=keyboard.$contents_width());
+   assert.ok(rect.y+rect.height<=keyboard.height-keyboard.padding-keyboard.padding_bottom);
+  }
+  assert.equal(keyboard.$item_max(),90);
+  scene.input_window.$select(0);await press();scene.input_window.$select(89);await press();named=true;}
  if(w?.choice_window?.active&&w.choice_window.openness===255){await press();confirmed=true;}
  else if(w?.pause){await press();}
  if(named&&confirmed&&text?.includes('choose your background')){console.log('PASS original windows');return;}
