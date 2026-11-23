@@ -78,6 +78,14 @@ function releaseControls(){
 }
 onblur=releaseControls;
 document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls()});
+// A native long-press menu or selection can interrupt a held game input on iPad.
+for(const eventName of ['contextmenu','selectstart']){
+ document.addEventListener(eventName,event=>{
+  if(!document.body.classList.contains('playing'))return;
+  if(event.target.closest?.('input,textarea,[contenteditable=true]'))return;
+  event.preventDefault();
+ });
+}
 const dpad=document.querySelector('.directions');
 function directionAt(e){
  const rect=dpad.getBoundingClientRect();

@@ -3,6 +3,14 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#141414;color:#ece7db;font:16px system-ui}main{max-width:800px;margin:auto;padding:clamp(16px,4vw,42px)}h1{font:small-caps 2rem Georgia;margin:0 0 16px}button,.pick{font:inherit;color:#fff;background:#34312c;border:1px solid #777064;border-radius:5px;padding:.55em .85em;cursor:pointer}button:focus-visible,.pick:focus-within{outline:2px solid #ffdb96}.pick input{position:absolute;width:1px;height:1px;opacity:0}.stage{background:black;border:1px solid #555;position:relative;margin:16px 0}canvas{display:block;width:100%;height:auto;image-rendering:pixelated}.panel{position:absolute;bottom:4%;left:4%;right:4%;padding:14px;background:#171614f5;border:1px solid #afa897;white-space:pre-line}.panel p{margin:0 0 10px}.panel button,.panel input{margin:3px}input[type=text]{padding:.55em;font:inherit;max-width:90%}#status{overflow-wrap:anywhere}small{color:#b6b2aa}
 body.playing{background:#000}.playing h1,.playing small,.playing #status:not(.error){display:none}.playing main{padding:0;max-width:none;display:grid;min-height:100dvh;align-content:center;justify-items:center}.playing .stage{border:0;margin:0;width:min(100vw,133.3333dvh)}.pad{display:none}
+body.playing,body.playing *{
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+}
+body.playing :is(input:not([type=file]),textarea,[contenteditable=true]){
+  -webkit-user-select:text;user-select:text;
+}
+.playing .stage{touch-action:none}
 .playing .pad{display:flex}
 .pad{
   --key:clamp(44px,8vmin,60px);
