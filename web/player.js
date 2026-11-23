@@ -45,13 +45,51 @@ el('folder').onchange=async e=>{
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
 const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',z:'ok',Escape:'cancel',x:'cancel',Shift:'shift'};
-onkeydown=e=>{if((e.key==="Enter"&&e.target.closest?.(".volume"))||!active||!keys[e.key])return;e.preventDefault();heldKeys.add(keys[e.key]);};
-onkeyup=e=>heldKeys.delete(keys[e.key]);
-onblur=()=>heldKeys.clear();
-for(const b of document.querySelectorAll('[data-key]')){
- b.onpointerdown=e=>{e.preventDefault();
- b.setPointerCapture(e.pointerId);heldKeys.add(b.dataset.key);};
- b.onlostpointercapture=b.onpointerup=b.onpointercancel=()=>heldKeys.delete(b.dataset.key);
+const pointers=new Map(), keyboard=new Map();
+const padButtons=[...document.querySelectorAll('.pad [data-key]')];
+if(navigator.maxTouchPoints>0)document.body.classList.add('touch-device');
+
+function syncKey(key){
+ if(!key)return;
+ const touched=[...pointers.values()].includes(key);
+ if(touched || [...keyboard.values()].includes(key))heldKeys.add(key);
+ else heldKeys.delete(key);
+ padButtons.find(button=>button.dataset.key===key)?.classList.toggle('pressed',touched);
+}
+function setPointer(id,key){
+ const old=pointers.get(id);
+ if(key===undefined)pointers.delete(id);
+ else pointers.set(id,key);
+ syncKey(old);
+ syncKey(key);
+}
+onkeydown=e=>{
+ const key=keys[e.key];
+ if(!active || !key || (e.key==='Enter' && e.target.closest?.('.volume')))return;
+ e.preventDefault();keyboard.set(e.code,key);syncKey(key);
+};
+onkeyup=e=>{
+ const key=keyboard.get(e.code);
+ keyboard.delete(e.code);syncKey(key);
+};
+function releaseControls(){
+ pointers.clear();keyboard.clear();heldKeys.clear();
+ for(const button of padButtons)button.classList.remove('pressed');
+}
+onblur=releaseControls;
+document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls()});
+for(const button of padButtons){
+ button.onpointerdown=e=>{
+  if(e.button!==0)return;
+  e.preventDefault();button.setPointerCapture(e.pointerId);
+  setPointer(e.pointerId,button.dataset.key);
+ };
+ button.onpointermove=e=>{
+  if(!pointers.has(e.pointerId) || !button.closest('.directions'))return;
+  const next=document.elementFromPoint(e.clientX,e.clientY)?.closest('.directions [data-key]');
+  setPointer(e.pointerId,next?.dataset.key ?? null);
+ };
+ button.onlostpointercapture=button.onpointerup=button.onpointercancel=e=>setPointer(e.pointerId,undefined);
 }
 el('screen').onpointerdown=e=>{
  if(!active||!scene)return;
@@ -72,7 +110,7 @@ el('screen').onpointerdown=e=>{
    }
   }
  }
- if(scene.message_window?.pause){heldKeys.add('ok');setTimeout(()=>heldKeys.delete('ok'),100);}
+ if(scene.message_window?.pause){heldKeys.add('ok');setTimeout(()=>syncKey('ok'),100);}
 };
 
 for(const [button,step] of [['quieter',-10],['louder',10]]){

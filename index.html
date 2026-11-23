@@ -1,15 +1,52 @@
 <!doctype html>
 <html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Black Souls II · JavaScript</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#141414;color:#ece7db;font:16px system-ui}main{max-width:800px;margin:auto;padding:clamp(16px,4vw,42px)}h1{font:small-caps 2rem Georgia;margin:0 0 16px}button,.pick{font:inherit;color:#fff;background:#34312c;border:1px solid #777064;border-radius:5px;padding:.55em .85em;cursor:pointer}button:focus-visible,.pick:focus-within{outline:2px solid #ffdb96}.pick input{position:absolute;width:1px;height:1px;opacity:0}.stage{background:black;border:1px solid #555;position:relative;margin:16px 0}canvas{display:block;width:100%;height:auto;image-rendering:pixelated}.panel{position:absolute;bottom:4%;left:4%;right:4%;padding:14px;background:#171614f5;border:1px solid #afa897;white-space:pre-line}.panel p{margin:0 0 10px}.panel button,.panel input{margin:3px}input[type=text]{padding:.55em;font:inherit;max-width:90%}#status{overflow-wrap:anywhere}.pad{display:flex;gap:6px;flex-wrap:wrap}.pad button{touch-action:none;user-select:none}small{color:#b6b2aa}
-body.playing{background:#000}.playing h1,.playing small,.playing #status:not(.error){display:none}.playing main{padding:0;max-width:none;display:grid;min-height:100dvh;align-content:center;justify-items:center}.playing .stage{border:0;margin:0;width:min(100vw,133.3333dvh)}.playing .pad{display:none}@media(pointer:coarse){.playing .pad{display:flex;justify-content:center;margin:.5em}.playing .stage{width:min(100vw,calc((100dvh - 4rem)*1.33333))}}
+*{box-sizing:border-box}body{margin:0;background:#141414;color:#ece7db;font:16px system-ui}main{max-width:800px;margin:auto;padding:clamp(16px,4vw,42px)}h1{font:small-caps 2rem Georgia;margin:0 0 16px}button,.pick{font:inherit;color:#fff;background:#34312c;border:1px solid #777064;border-radius:5px;padding:.55em .85em;cursor:pointer}button:focus-visible,.pick:focus-within{outline:2px solid #ffdb96}.pick input{position:absolute;width:1px;height:1px;opacity:0}.stage{background:black;border:1px solid #555;position:relative;margin:16px 0}canvas{display:block;width:100%;height:auto;image-rendering:pixelated}.panel{position:absolute;bottom:4%;left:4%;right:4%;padding:14px;background:#171614f5;border:1px solid #afa897;white-space:pre-line}.panel p{margin:0 0 10px}.panel button,.panel input{margin:3px}input[type=text]{padding:.55em;font:inherit;max-width:90%}#status{overflow-wrap:anywhere}small{color:#b6b2aa}
+body.playing{background:#000}.playing h1,.playing small,.playing #status:not(.error){display:none}.playing main{padding:0;max-width:none;display:grid;min-height:100dvh;align-content:center;justify-items:center}.playing .stage{border:0;margin:0;width:min(100vw,133.3333dvh)}.pad{display:none}
+@media(any-pointer:coarse){
+  .playing .pad{display:flex}
+}
+.playing.touch-device .pad{display:flex}
+.pad{
+  --key:clamp(44px,8vmin,60px);
+  position:absolute;inset:0;z-index:2;pointer-events:none;
+  justify-content:space-between;align-items:flex-end;padding:clamp(6px,1.6vmin,16px);
+}
+.directions{display:grid;grid-template:repeat(3,var(--key))/repeat(3,var(--key))}
+.directions [data-key=up]{grid-area:1/2}
+.directions [data-key=left]{grid-area:2/1}
+.directions [data-key=right]{grid-area:2/3}
+.directions [data-key=down]{grid-area:3/2}
+.actions{display:flex;align-items:flex-end;gap:5px}
+.pad button{
+  width:var(--key);height:var(--key);padding:0;pointer-events:auto;touch-action:none;
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+  display:grid;place-content:center;gap:1px;text-align:center;
+  background:rgba(19,17,22,.66);border:1px solid #e0d5b5aa;border-radius:30%;
+  box-shadow:0 1px 4px #0009;color:#faf5e7;font:600 20px/1 system-ui;
+}
+.pad .actions button{border-radius:50%}
+.pad .actions [data-key=ok]{margin-bottom:calc(var(--key)*.43);border-color:#e8c77c;color:#ffe7a8}
+.actions span{font:500 10px/1.1 system-ui}
+.pad button.pressed{background:#735938e8;border-color:#ffe7a8;transform:scale(.94)}
 .volume{position:fixed;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:4px;background:#171717;color:white;border-radius:5px;padding:3px}.volume output{min-width:4ch;text-align:center;font-variant-numeric:tabular-nums}.volume button{min-width:40px;touch-action:manipulation}
 </style>
 <div class="volume" role="group" aria-label="เสียงเกม"><button type="button" id="quieter" aria-label="ลดเสียง">−</button><output id="volume-level" aria-live="polite">100%</output><button type="button" id="louder" aria-label="เพิ่มเสียง">+</button></div>
 <main><h1>Black Souls II</h1>
 <label class="pick" id="picker">เลือกโฟลเดอร์เกม <input id="folder" type="file" webkitdirectory multiple></label>
-<div class="stage"><canvas width="544" height="416" id="screen" tabindex="0" aria-label="หน้าจอเกม"></canvas></div>
-
-<div class="pad"><button data-key="left">◀</button><button data-key="up">▲</button><button data-key="down">▼</button><button data-key="right">▶</button><button data-key="ok">ตกลง Z</button><button data-key="cancel">ย้อนกลับ X</button></div>
+<div class="stage"><canvas width="544" height="416" id="screen" tabindex="0" aria-label="หน้าจอเกม"></canvas>
+  <div class="pad" role="group" aria-label="ปุ่มควบคุมเกม">
+    <div class="directions">
+      <button data-key="up" aria-label="ขึ้น">▲</button>
+      <button data-key="left" aria-label="ซ้าย">◀</button>
+      <button data-key="right" aria-label="ขวา">▶</button>
+      <button data-key="down" aria-label="ลง">▼</button>
+    </div>
+    <div class="actions">
+      <button data-key="cancel" aria-label="ย้อนกลับ">X<span>กลับ</span></button>
+      <button data-key="ok" aria-label="ยืนยัน">Z<span>ตกลง</span></button>
+    </div>
+  </div>
+</div>
 <p id="status" role="status">เลือกโฟลเดอร์ BLACK SOULS II ที่แตกแล้ว ซึ่งมี Game.rgss3a</p><small>ลูกศรเพื่อเดิน · Enter/Z ยืนยัน · Esc/X ย้อนกลับ</small></main>
 <script src="vendor/opal.js"></script><script src="vendor/compiler.js"></script><script src="adapters/generated.js"></script><script src="web/host.js"></script><script src="web/images.js"></script><script src="web/definitions.js"></script><script src="web/archive.js"></script><script src="web/assets.js"></script><script src="web/marshal.js"></script><script src="web/autotile.js"></script><script src="web/project.js"></script><script src="web/rgss3-display.js"></script><script src="web/data.js"></script><script src="web/formulas.js"></script><script src="web/saves.js"></script><script src="web/events.js"></script><script src="web/native-ui.js"></script><script src="web/player.js"></script></html>
