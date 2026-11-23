@@ -24,11 +24,16 @@ const player=g.game_player;
 player.$reserve_transfer(51,28,61,6);player.$perform_transfer();
 const assert=require('node:assert/strict');
 const escape=process.argv[3]==='escape';
+const multiHit=process.argv[3]==='multi-hit';
+if(multiHit){
+ g.game_party.$remove_actor(1);g.game_party.$add_actor(3);
+ assert.equal(g.game_party.$leader().$mhp(),538);
+}
 Opal.SceneManager.$snapshot_for_background();Opal.BattleManager.$setup(escape?22:1,true,true);Opal.BattleManager.$save_bgm_and_bgs();
 Opal.SceneManager.$call(Opal.Scene_Battle);const scene=Opal.SceneManager.$scene();scene.$start();scene.$post_start();
 const enemy=g.game_troop.$members()[0];
 const initial=enemy.$hp();
-let attacked=false,usedRun=false;
+let attacked=false,usedRun=false,survivedHit=false;
 for(let i=0;i<2400 && (Opal.SceneManager.$scene()===scene || scene.browserBattleMessage);i++){
  if(i%8===0)heldKeys.add('ok');else heldKeys.delete('ok');
  if(Opal.SceneManager.$scene()!==scene){scene.advanceBrowserBattleMessage();continue;}
@@ -38,8 +43,10 @@ for(let i=0;i<2400 && (Opal.SceneManager.$scene()===scene || scene.browserBattle
   scene.$command_escape();usedRun=true;
  }else scene.$update();
  attacked ||= enemy.$hp()<initial;
+ survivedHit ||= enemy.$hp()>0 && enemy.$hp()<initial;
 }
 assert.ok(attacked,'attack must reach the target');
+if(multiHit)assert.ok(survivedHit,'damage numbers must expire while the enemy survives');
 if(escape)assert.ok(usedRun && g.game_troop.$alive_members().length>0,'successful Run against a living target');
 else assert.equal(enemy.$hp(),0);
 assert.equal(scene.browserBattleMessage,null);

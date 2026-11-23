@@ -29,11 +29,18 @@ Opal.defn(Opal.Kernel,'$load_data',function(path){
   if(!database.has(key))throw Error('Database not loaded: '+path);
   return database.get(key);
 });
+let voiceFiles=[];
 async function prepareDatabase(project){
+  voiceFiles=project.source.names().filter(path=>/^audio\/voice\/[^/]+$/i.test(path));
   const names=['Actors','Classes','Skills','Items','Weapons','Armors','Enemies','Troops','States','Animations','Tilesets','CommonEvents','System','MapInfos','Map'+String(project.system.start_map_id).padStart(3,'0')];
   for(const name of names){
     const data=rubyValue(await project.data(name));
     database.set('data/'+name.toLowerCase()+'.rvdata2',data);
   }
 }
-Opal.$$$("Dir").$glob=function(pattern){if(/^Save.*rvdata2$/i.test(pattern))return [];throw Error('Unsupported directory pattern: '+pattern);};
+Opal.$$$("Dir").$glob=function(pattern){
+  if(/^Save.*rvdata2$/i.test(pattern))return [];
+  const voice=String(pattern).match(/^Audio\/VOICE\/\*\\\[(vid-?\d+_sid\d+)\\\]\*$/i);
+  if(voice)return voiceFiles.filter(path=>path.toLowerCase().includes('['+voice[1].toLowerCase()+']'));
+  throw Error('Unsupported directory pattern: '+pattern);
+};
