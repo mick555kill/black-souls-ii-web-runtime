@@ -120,8 +120,8 @@ el('screen').onpointerdown=e=>{
   heldKeys.add('ok');setTimeout(()=>syncKey('ok'),100);return;
  }
  const bounds=e.currentTarget.getBoundingClientRect();
- const px=(e.clientX-bounds.left)*display.canvas.width/bounds.width;
- const py=(e.clientY-bounds.top)*display.canvas.height/bounds.height;
+ const [u,v]=crt.sourcePoint((e.clientX-bounds.left)/bounds.width,(e.clientY-bounds.top)/bounds.height);
+ const px=u*display.canvas.width,py=v*display.canvas.height;
  const windows=[scene.message_window?.choice_window,...Object.values(scene)];
  for(const w of windows){
   if(!w?.active||typeof w.$item_rect!=='function'||!w.visible||!w['$open?']())continue;
