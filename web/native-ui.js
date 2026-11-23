@@ -38,9 +38,10 @@ Opal.Window_Base.$$prototype.$delete_special_characters=function(text){
  return String(text).replace(/\x1b(?:[a-z]+(?:\[[^\]]*\])?|.)?/gi,'');
 };
 function messageWindow(){return Opal.SceneManager.$scene().message_window;}
-function endMessage(w){w['$pause='](false);w.$close();G.game_message.$clear();G.game_message['$visible='](false);}
+function endMessage(w){globalThis.thaiCaptions?.clear();w['$pause='](false);w.$close();G.game_message.$clear();G.game_message['$visible='](false);}
 globalThis.playerUI={
  message(text,p,withChoices,w=messageWindow()){
+  globalThis.thaiCaptions?.message(text,p[3]);
   const m=G.game_message;
   m['$face_name='](p[0]);m['$face_index='](p[1]);m['$background='](p[2]);m['$position='](p[3]);m['$visible='](true);
   m.$add(text);w.$update_background();w.$update_placement();w.$open();
@@ -78,6 +79,7 @@ globalThis.playerUI={
    enabled.push(!enable||Opal.truthy(interpreter.$choice_eval(enable[1])));
   }
   if(!labels.length){done(-1);endMessage(w);return ()=>true;}
+  globalThis.thaiCaptions?.choices(labels);
   m.choices=labels;m.choice_enables=enabled;m.choice_cancel_type=cancel;
   branches.push(cancel-1);enabled.push(cancel>0);
   m.choice_proc=i=>{done(branches[i]);finished=true;};
