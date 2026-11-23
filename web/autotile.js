@@ -5,24 +5,26 @@
   const T = 32, H = 16;
   // 48 floor shapes (A1 water / A2 ground / A4 tops). Block is 4x6 quarters; 47 = whole top-left tile.
   const FLOOR = [
-    [13,14,17,18],[2,14,17,18],[13,3,17,18],[2,3,17,18],[13,14,17,7],[2,14,17,7],[13,3,17,7],[2,3,17,7],
-    [13,14,6,18],[2,14,6,18],[13,3,6,18],[2,3,6,18],[13,14,6,7],[2,14,6,7],[13,3,6,7],[2,3,6,7],
-    [12,14,16,18],[12,3,16,18],[12,14,16,7],[12,3,16,7],[9,10,17,18],[9,10,17,7],[9,10,6,18],[9,10,6,7],
-    [13,15,17,19],[13,15,6,19],[2,15,17,19],[2,15,6,19],[13,14,21,22],[2,14,21,22],[13,3,21,22],[2,3,21,22],
-    [12,15,16,19],[9,10,21,22],[8,9,12,13],[8,9,12,7],[10,11,14,15],[10,11,6,15],[18,19,22,23],[2,19,22,23],
+    [18,17,14,13],[2,17,14,13],[18,3,14,13],[2,3,14,13],[18,17,14,7],[2,17,14,7],[18,3,14,7],[2,3,14,7],
+    [18,17,6,13],[2,17,6,13],[18,3,6,13],[2,3,6,13],[18,17,6,7],[2,17,6,7],[18,3,6,7],[2,3,6,7],
+    [16,17,12,13],[16,3,12,13],[16,17,12,7],[16,3,12,7],[10,9,14,13],[10,9,14,7],[10,9,6,13],[10,9,6,7],
+    [18,19,14,15],[18,19,6,15],[2,19,14,15],[2,19,6,15],[18,17,22,21],[2,17,22,21],[18,3,22,21],[2,3,22,21],
+    [16,19,12,15],[10,9,22,21],[8,9,12,13],[8,9,12,7],[10,11,14,15],[10,11,6,15],[18,19,22,23],[2,19,22,23],
     [16,17,20,21],[16,3,20,21],[8,11,12,15],[8,9,20,21],[16,19,20,23],[10,11,22,23],[8,11,20,23],[0,1,4,5]
   ];
   // 16 wall shapes (A3 / A4 sides). Block is 4x4 quarters. bit1=left open, 2=top, 4=right, 8=bottom.
   const WALL = [
-    [5,6,9,10],[4,5,8,9],[1,2,5,6],[0,1,4,5],[6,7,10,11],[4,7,8,11],[2,3,6,7],[0,3,4,7],
-    [9,10,13,14],[8,9,12,13],[1,2,13,14],[0,1,12,13],[10,11,14,15],[8,11,12,15],[2,3,14,15],[0,3,12,15]
+    [10,9,6,5],[8,9,4,5],[2,1,6,5],[0,1,4,5],[10,11,6,7],[8,11,4,7],[2,3,6,7],[0,3,4,7],
+    [10,9,14,13],[8,9,12,13],[2,1,14,13],[0,1,12,13],[10,11,14,15],[8,11,12,15],[2,3,14,15],[0,3,12,15]
   ];
-  const WATERFALL = [[0,1,6,7],[0,1,4,5],[2,3,6,7],[1,2,5,6]];
+  const WATERFALL = [
+    [2,1,6,5],[0,1,4,5],[2,3,6,7],[0,3,4,7]
+  ];
   const A1POS = [[0,0],[0,96],[192,0],[192,96],[256,0],[448,0],[256,96],[448,96],
                  [0,192],[192,192],[0,288],[192,288],[256,192],[448,192],[256,288],[448,288]];
   const isWaterfall = k => k < 16 && k % 2 === 1 && k >= 5;
 
-  /** Describe where a tile comes from: {sheet, quads:[{sx,sy}x4]} or {sheet,sx,sy,whole:true}. frame = 0..2 */
+  /** Describe where a tile comes from: {sheet, quads:[{sx,sy}x4]} or {sheet,sx,sy,whole:true}. frame = animation step */
   function locate(id, frame = 0) {
     if (id <= 0) return null;
     if (id < 1024) { // B..E
@@ -41,7 +43,7 @@
         by += T * (frame % 3);
       } else {
         table = FLOOR;
-        if (kind !== 2 && kind !== 3) bx += 2 * T * (frame % 3);
+        if (kind !== 2 && kind !== 3) bx += 2 * T * [0,1,2,1][frame % 4];
       }
     } else if (kind < 48) { sheet = 1; const k = kind - 16; bx = 2 * T * (k % 8); by = 3 * T * (k >> 3); table = FLOOR; }
     else if (kind < 80) { sheet = 2; const k = kind - 48; bx = 2 * T * (k % 8); by = 2 * T * (k >> 3); table = WALL; }
@@ -54,7 +56,12 @@
     if (!entry) return null;
     return {sheet, quads: entry.map(q => ({sx: bx + H * (q % 4), sy: by + H * (q >> 2)}))};
   }
-  const animated = id => id >= 2048 && id < 2816;
+  function phase(id,frame){
+    if(id<2048 || id>=2816)return 0;
+    const kind=Math.floor((id-2048)/48);
+    if(kind===2 || kind===3)return 0;
+    return isWaterfall(kind)?frame%3:[0,1,2,1][frame%4];
+  }
 
   /** Composite a tile into a 32x32 canvas created by makeCanvas(w,h). Returns canvas or null. */
   function compose(id, sheets, frame, makeCanvas) {
@@ -69,6 +76,6 @@
   }
 
   root.VX = root.VX || {};
-  root.VX.Autotile = {FLOOR, WALL, WATERFALL, A1POS, locate, compose, animated, isWaterfall};
+  root.VX.Autotile = {FLOOR, WALL, WATERFALL, A1POS, locate, compose, phase, animated:id=>id>=2048&&id<2816, isWaterfall};
   if (typeof module !== 'undefined') module.exports = root.VX.Autotile;
 })(typeof window !== 'undefined' ? window : globalThis);

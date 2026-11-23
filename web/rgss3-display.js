@@ -173,7 +173,7 @@
         case 'sprite-crop':{
           const sprite=this.sprites.get(args[0]);if(sprite)sprite.crop=args.slice(1);return;
         }
-        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,blend_type:0,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
+        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,blend_type:0,plane:false,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
         case 'sprite-set':{
           const [id,key,value]=args,s=this.sprites.get(id);
           if(s&&Object.prototype.hasOwnProperty.call(s,String(key))){s[String(key)]=value;if(key==='bitmap')s.crop=null;}
@@ -193,6 +193,9 @@
       });
     }
     render(){
+      for(const tiles of this.tilemaps.values()){
+        if(tiles.loading?.some(bitmap=>bitmap.ready))this.drawTiles(...tiles.lastDraw);
+      }
       const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
       const flashing=t=>t?.flash && (this.frameNumber??0)<t.flash.start+t.flash.duration;
@@ -215,6 +218,18 @@
         if(s.window){this.drawWindow(c,s,b);c.restore();continue;}
         c.globalAlpha=Math.max(0,Math.min(1,Number(s.opacity)/255));
         if(s.blend_type===1)c.globalCompositeOperation='lighter';
+        if(s.plane){
+          if(b.ready && s.zoom_x>0 && s.zoom_y>0){
+            if(b.patternCanvas!==b.canvas){
+              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;
+            }
+            const x=viewport?.ox||0,y=viewport?.oy||0;
+            c.scale(s.zoom_x,s.zoom_y);c.translate(-s.ox,-s.oy);
+            c.fillStyle=b.pattern;
+            c.fillRect(x/s.zoom_x+s.ox,y/s.zoom_y+s.oy,(viewport?.rect[2]??this.canvas.width)/s.zoom_x,(viewport?.rect[3]??this.canvas.height)/s.zoom_y);
+          }
+          c.restore();continue;
+        }
         const [sx,sy,w,h]=s.crop || [0,0,b.width,b.height];
         if(w>0 && h>0 && s.zoom_x && s.zoom_y){
           if(s.angle || s.mirror){
@@ -274,8 +289,14 @@
     drawTiles(id,lowId,highId,ox,oy,frame,visible,sheetIds){
       const tiles=this.tilemaps.get(id),low=this.bitmaps.get(lowId),high=this.bitmaps.get(highId);
       if(!tiles?.map || !low || !high || !visible)return;
-      const sheets=sheetIds.split(',').map(id=>this.bitmaps.get(Number(id))).map(b=>b?.ready?b.canvas:null);
-      const cache=new Map();
+      const sources=sheetIds.split(',').map(id=>this.bitmaps.get(Number(id)));
+      tiles.loading=sources.filter(b=>b && !b.ready);
+      tiles.lastDraw=tiles.loading.length?[id,lowId,highId,ox,oy,frame,visible,sheetIds]:null;
+      const sheets=sources.map(b=>b?.ready?b.canvas:null);
+      if(!tiles.sheets || sheets.some((sheet,i)=>sheet!==tiles.sheets[i])){
+        tiles.sheets=sheets;tiles.cache=new Map();
+      }
+      const cache=tiles.cache;
       for(const target of [low,high])target.ctx.clearRect(0,0,target.width,target.height);
       const {map,flags}=tiles;
       for(let y=Math.max(0,Math.floor(oy/32));y<Math.min(map.height,Math.ceil((oy+low.height)/32));y++){
@@ -283,8 +304,12 @@
           const dx=x*32-ox,dy=y*32-oy;
           for(let z=0;z<Math.min(3,map.depth);z++){
             const tile=map.at(x,y,z);if(!tile)continue;
-            if(!cache.has(tile))cache.set(tile,root.VX.Autotile.compose(tile,sheets,frame,(w,h)=>this.canvasOf(w,h)));
-            const image=cache.get(tile);
+            const key=tile*3+root.VX.Autotile.phase(tile,frame);
+            if(!cache.has(key)){
+              if(cache.size>=1024)cache.delete(cache.keys().next().value);
+              cache.set(key,root.VX.Autotile.compose(tile,sheets,frame,(w,h)=>this.canvasOf(w,h)));
+            }
+            const image=cache.get(key);
             if(image)((flags?.at(tile)&16)?high:low).ctx.drawImage(image,dx,dy);
           }
           const shadow=map.at(x,y,3)&15;

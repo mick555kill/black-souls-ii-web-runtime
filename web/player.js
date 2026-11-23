@@ -19,7 +19,7 @@ function tick(t){
    frameTime=t;const current=Opal.SceneManager.$scene();
    if(current===Opal.nil){active=false;el('status').textContent='จบการทำงาน';return;}
    if(current!==scene && scene?.browserBattleMessage){
-    scene.advanceBrowserBattleMessage();display.render();requestAnimationFrame(tick);return;
+    scene.advanceBrowserBattleMessage();display.render();crt.draw();requestAnimationFrame(tick);return;
    }
    if(current!==scene){
     if(scene){scene.$pre_terminate();scene.$terminate();}
@@ -28,8 +28,7 @@ function tick(t){
 
    }
    scene.$update();display.render();
-   const map=Opal.gvars.game_map, id=map?.$map_id?.();
-   el('status').textContent=scene.$$class.$$name+(id?' · Map '+id+' · '+project.mapName(id):'');
+   crt.draw();
   }
   requestAnimationFrame(tick);
  }catch(e){errorMessage(e);}

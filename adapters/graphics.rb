@@ -318,6 +318,7 @@ class Sprite
                 :bush_depth, :wave_amp, :wave_length, :wave_speed, :wave_phase
   def initialize(viewport = nil)
     @id = RGSSWeb.host.spriteCreate.to_i
+    RGSSWeb.host.spriteSet(@id, "plane", true) if is_a?(Plane)
     @bitmap = nil
     self.viewport = viewport
     @src_rect = Rect.new.on_change do |r|
@@ -415,7 +416,7 @@ class Tilemap
     RGSSWeb.host.tileCells(@layers.first.id,kind,table.xsize,table.ysize,table.zsize,table.instance_variable_get(:@cells)) if table
   end
   def update
-    args = [@ox.to_i,@oy.to_i,Graphics.frame_count/30%3,@visible,@bitmaps.map { |b| b ? b.id : -1 }.join(',')]
+    args = [@ox.to_i,@oy.to_i,Graphics.frame_count.div(30)%12,@visible,@bitmaps.map { |b| b ? b.id : -1 }.join(',')]
     return if args == @last
     @last = args
     @layers.each { |s| s.visible = @visible }

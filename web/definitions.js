@@ -651,6 +651,7 @@
       
       if (viewport == null) viewport = nil;
       self.id = $$('RGSSWeb').$host().$spriteCreate().$to_i();
+      if ($truthy(self['$is_a?']($$('Plane')))) $$('RGSSWeb').$host().$spriteSet(self.id, "plane", true);
       self.bitmap = nil;
       self['$viewport='](viewport);
       self.src_rect = $send($$('Rect').$new(), 'on_change', [], function $$9(r){var self = $$9.$$s == null ? this : $$9.$$s;
@@ -878,7 +879,7 @@
       var self = this, args = nil;
 
       
-      args = [self.ox.$to_i(), self.oy.$to_i(), $rb_divide($$('Graphics').$frame_count(), 30)['$%'](3), self.visible, $send(self.bitmaps, 'map', [], function $$24(b){
+      args = [self.ox.$to_i(), self.oy.$to_i(), $$('Graphics').$frame_count().$div(30)['$%'](12), self.visible, $send(self.bitmaps, 'map', [], function $$24(b){
         
         if (b == null) b = nil;
         if ($truthy(b)) {
