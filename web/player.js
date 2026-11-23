@@ -65,7 +65,7 @@ function setPointer(id,key){
 }
 onkeydown=e=>{
  const key=keys[e.key];
- if(!active || !key || (e.key==='Enter' && e.target.closest?.('.volume')))return;
+ if(!active || !key || e.target.closest?.('.pad-settings') || (e.key==='Enter' && e.target.closest?.('.volume')))return;
  e.preventDefault();keyboard.set(e.code,key);syncKey(key);
 };
 onkeyup=e=>{
@@ -139,3 +139,21 @@ for(const [button,step] of [['quieter',-10],['louder',10]]){
   if(active&&e.detail>0)el('screen').focus();
  };
 }
+
+const transparency=el('pad-transparency');
+const pad=document.querySelector('.pad');
+const transparencyKey='bs2.padTransparency';
+function showTransparency(){
+ const percent=transparency.valueAsNumber;
+ pad.style.opacity=String(1-percent/100);
+ el('pad-percent').value=percent+'%';
+}
+try{
+ const saved=localStorage.getItem(transparencyKey);
+ if(saved!==null && /^(?:100|[1-9]?[0-9])$/.test(saved))transparency.value=saved;
+}catch{/* Storage can be disabled in private browsing. */}
+showTransparency();
+transparency.addEventListener('input',showTransparency);
+transparency.addEventListener('change',()=>{
+ try{localStorage.setItem(transparencyKey,transparency.value)}catch{/* Keep the current session setting. */}
+});

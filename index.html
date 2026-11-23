@@ -43,9 +43,13 @@ body.playing :is(input:not([type=file]),textarea,[contenteditable=true]){
 .pad .actions [data-key=ok]{margin-bottom:calc(var(--key)*.63);border-color:#e8c77c;color:#ffe7a8}
 .actions span{font:500 10px/1.1 system-ui}
 .pad button.pressed{background:#735938e8;border-color:#ffe7a8;transform:scale(.94)}
-.volume{position:fixed;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:4px;background:#171717;color:white;border-radius:5px;padding:3px}.volume output{min-width:4ch;text-align:center;font-variant-numeric:tabular-nums}.volume button{min-width:40px;touch-action:manipulation}
+.toolbar{position:fixed;top:8px;right:8px;z-index:5;display:flex;align-items:center;gap:4px;background:#171717;color:white;border-radius:5px;padding:3px}.volume{display:flex;align-items:center;gap:4px}.volume output{min-width:4ch;text-align:center;font-variant-numeric:tabular-nums}.volume button{min-width:40px;touch-action:manipulation}
+.pad-settings summary{padding:8px 10px;cursor:pointer;color:#ffe7a8;touch-action:manipulation}
+.pad-settings .slider-panel{position:absolute;top:calc(100% + 4px);right:0;width:min(240px,94vw);padding:12px;background:#201e20;border:1px solid #777064;border-radius:6px}
+.slider-panel label{display:flex;justify-content:space-between;gap:8px}
+.slider-panel input{width:100%;height:36px;margin:0;accent-color:#e8c77c}
 </style>
-<div class="volume" role="group" aria-label="เสียงเกม"><button type="button" id="quieter" aria-label="ลดเสียง">−</button><output id="volume-level" aria-live="polite">100%</output><button type="button" id="louder" aria-label="เพิ่มเสียง">+</button></div>
+<div class="toolbar"><details class="pad-settings"><summary>ปุ่มเกม</summary><div class="slider-panel"><label for="pad-transparency">ความโปร่งใส <output id="pad-percent" for="pad-transparency">0%</output></label><input id="pad-transparency" type="range" min="0" max="100" step="5" value="0"></div></details><div class="volume" role="group" aria-label="เสียงเกม"><button type="button" id="quieter" aria-label="ลดเสียง">−</button><output id="volume-level" aria-live="polite">100%</output><button type="button" id="louder" aria-label="เพิ่มเสียง">+</button></div></div>
 <main><h1>Black Souls II</h1>
 <label class="pick" id="picker">เลือกโฟลเดอร์เกม <input id="folder" type="file" webkitdirectory multiple></label>
 <div class="stage"><canvas width="544" height="416" id="screen" tabindex="0" aria-label="หน้าจอเกม"></canvas>
