@@ -17,6 +17,9 @@ function tick(t){
   if(t-frameTime>=15){
    frameTime=t;const current=Opal.SceneManager.$scene();
    if(current===Opal.nil){active=false;el('status').textContent='จบการทำงาน';return;}
+   if(current!==scene && scene?.browserBattleMessage){
+    scene.advanceBrowserBattleMessage();display.render();requestAnimationFrame(tick);return;
+   }
    if(current!==scene){
     if(scene){scene.$pre_terminate();scene.$terminate();}
     scene=current;scene.$start();scene.$post_start();
@@ -112,6 +115,9 @@ for(const button of document.querySelectorAll('.actions [data-key]')){
 }
 el('screen').onpointerdown=e=>{
  if(!active||!scene)return;
+ if(scene.browserBattleMessage){
+  heldKeys.add('ok');setTimeout(()=>syncKey('ok'),100);return;
+ }
  const bounds=e.currentTarget.getBoundingClientRect();
  const px=(e.clientX-bounds.left)*display.canvas.width/bounds.width;
  const py=(e.clientY-bounds.top)*display.canvas.height/bounds.height;

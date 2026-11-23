@@ -142,12 +142,12 @@
         }
         case 'bitmap-blt':{
           const [id,x,y,source,sx,sy,w,h,opacity]=args,b=this.bitmaps.get(id),src=this.bitmaps.get(source);
-          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,w,h,x,y,w,h);b.ctx.restore();if(this.enabled)this.render();};
+          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,w,h,x,y,w,h);b.ctx.restore();};
             if(src.ready)draw();else src.pending.push(draw);}return;
         }
         case 'bitmap-stretch-blt':{
           const [id,x,y,w,h,source,sx,sy,sw,sh,opacity]=args,b=this.bitmaps.get(id),src=this.bitmaps.get(source);
-          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,sw||src.width,sh||src.height,x,y,w,h);b.ctx.restore();if(this.enabled)this.render();};
+          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,sw||src.width,sh||src.height,x,y,w,h);b.ctx.restore();};
             if(src.ready)draw();else src.pending.push(draw);}return;
         }
         case 'tile-table':{

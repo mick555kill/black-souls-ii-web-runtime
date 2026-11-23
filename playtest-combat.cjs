@@ -19,14 +19,37 @@ Opal.DataManager.$init();
 Opal.SceneManager.$goto(Opal.Scene_Title);
 
 const g=Opal.gvars;Opal.DataManager.$setup_new_game();Opal.SceneManager.$goto(Opal.Scene_Map);
-Opal.SceneManager.$snapshot_for_background();Opal.BattleManager.$setup(1,true,true);Opal.BattleManager.$save_bgm_and_bgs();
+await loadMapData(51);
+const player=g.game_player;
+player.$reserve_transfer(51,28,61,6);player.$perform_transfer();
+const assert=require('node:assert/strict');
+const escape=process.argv[3]==='escape';
+Opal.SceneManager.$snapshot_for_background();Opal.BattleManager.$setup(escape?22:1,true,true);Opal.BattleManager.$save_bgm_and_bgs();
 Opal.SceneManager.$call(Opal.Scene_Battle);const scene=Opal.SceneManager.$scene();scene.$start();scene.$post_start();
-const enemy=g.game_troop.$members()[0],initial=enemy.$hp();
-for(let i=0;i<1800&&Opal.SceneManager.$scene()===scene;i++){
+const enemy=g.game_troop.$members()[0];
+const initial=enemy.$hp();
+let attacked=false,usedRun=false;
+for(let i=0;i<2400 && (Opal.SceneManager.$scene()===scene || scene.browserBattleMessage);i++){
  if(i%8===0)heldKeys.add('ok');else heldKeys.delete('ok');
- scene.$update();
- 
- if(i%300===0)console.log(i,Object.keys(scene).filter(k=>scene[k]?.active===true),g.game_message.texts);
+ if(Opal.SceneManager.$scene()!==scene){scene.advanceBrowserBattleMessage();continue;}
+ if(escape && attacked && !scene.browserBattleMessage && String(Opal.BattleManager.phase)==='input'){
+  // Guarantee a successful roll while using the game's actual Run handler.
+  Opal.BattleManager.preemptive=true;
+  scene.$command_escape();usedRun=true;
+ }else scene.$update();
+ attacked ||= enemy.$hp()<initial;
 }
-const assert=require('node:assert/strict');assert.equal(enemy.$hp(),0);assert.equal(Opal.SceneManager.$scene().$$class,Opal.Scene_Map);console.log('PASS victory and return to map',initial,enemy.$hp());
-})().catch(e=>{console.error(String(e.message).slice(0,300),e.stack?.slice(0,3500));process.exitCode=1;});
+assert.ok(attacked,'attack must reach the target');
+if(escape)assert.ok(usedRun && g.game_troop.$alive_members().length>0,'successful Run against a living target');
+else assert.equal(enemy.$hp(),0);
+assert.equal(scene.browserBattleMessage,null);
+const mapScene=Opal.SceneManager.$scene();assert.equal(mapScene.$$class,Opal.Scene_Map);
+scene.$pre_terminate();scene.$terminate();mapScene.$start();mapScene.$post_start();heldKeys.clear();
+for(let i=0;i<120;i++)mapScene.$update();
+assert.equal(g.game_message['$busy?'](),false);
+assert.equal(player['$movable?'](),true);
+const x=player.x;
+heldKeys.add('right');mapScene.$update();heldKeys.clear();
+assert.equal(player.x,x+1,'must walk on the returned map');
+console.log('PASS attack,',escape?'Run':'victory', 'and walking on Map 051');
+})().catch(e=>{console.error(e.stack);process.exitCode=1;});

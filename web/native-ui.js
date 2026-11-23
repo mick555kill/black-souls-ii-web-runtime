@@ -31,8 +31,8 @@ Opal.Window_Base.$$prototype.$delete_special_characters=function(text){
 function messageWindow(){return Opal.SceneManager.$scene().message_window;}
 function endMessage(w){w['$pause='](false);w.$close();G.game_message.$clear();G.game_message['$visible='](false);}
 globalThis.playerUI={
- message(text,p,withChoices){
-  const w=messageWindow(),m=G.game_message;
+ message(text,p,withChoices,w=messageWindow()){
+  const m=G.game_message;
   m['$face_name='](p[0]);m['$face_index='](p[1]);m['$background='](p[2]);m['$position='](p[3]);m['$visible='](true);
   m.$add(text);w.$update_background();w.$update_placement();w.$open();
   w.$new_page(text.split('\n',1)[0],Opal.hash());
@@ -91,10 +91,27 @@ Opal.Window_Base.$$prototype.$calc_line_height=function(text,restore=true){
 const battleWindowHost=Opal.Scene_Battle.$$prototype;
 battleWindowHost.$wait_for_message=function(){
  const m=G.game_message;
- if(this.browserBattleMessage||m.visible||!m.texts.length)return;
- const text=m.texts.join('\n'),params=[m.face_name,m.face_index,m.background,m.position];
- m.texts=[];
- this.browserBattleMessage=playerUI.message(text,params,false);
+ const current=this.browserBattleMessage;
+ if(!current && m.visible===true)return; // The troop interpreter owns its dialogue.
+ // The message window keeps its displayed text in the first array entry.
+ const queued=current ? m.texts.splice(1) : m.texts.splice(0);
+ if(!queued.length)return;
+ (this.browserMessageQueue??=[]).push({
+  text:queued.join('\n'),params:[m.face_name,m.face_index,m.background,m.position]
+ });
+ if(!current)this.startBrowserBattleMessage();
+};
+battleWindowHost.startBrowserBattleMessage=function(){
+ const next=this.browserMessageQueue.shift();
+ this.browserBattleMessage=next
+  ? playerUI.message(next.text,next.params,false,this.message_window)
+  : null;
+};
+battleWindowHost.advanceBrowserBattleMessage=function(){
+ Opal.Graphics.$update();
+ Opal.Input.$update();
+ this.message_window.$update();
+ if(this.browserBattleMessage())this.startBrowserBattleMessage();
 };
 battleWindowHost.$process_event_te_a_resurrection=function(){
  if(this['$scene_changing?']()||this.browserBattleMessage)return;
@@ -107,11 +124,13 @@ battleWindowHost.$process_event_te_a_resurrection=function(){
 };
 const updateBattleScene=battleWindowHost.$update;
 battleWindowHost.$update=function(){
- if(this.browserBattleMessage||this.browserTroopEvent){
+ if(this.browserBattleMessage){
+  this.advanceBrowserBattleMessage();
+  return;
+ }
+ if(this.browserTroopEvent){
   this.$update_basic();
-  if(this.browserBattleMessage){
-   if(this.browserBattleMessage())this.browserBattleMessage=null;
-  }else this.$process_event();
+  this.$process_event();
   return;
  }
  return updateBattleScene.call(this);
