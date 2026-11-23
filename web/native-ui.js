@@ -129,9 +129,40 @@ battleWindowHost.$process_event_te_a_resurrection=function(){
  const troop=G.game_troop,it=troop.$interpreter();
  it.$update();troop.$setup_battle_event();this.$wait_for_message();
  this.browserTroopEvent=it['$running?']();
- if(this.browserTroopEvent||this.browserBattleMessage)return;
+ if(this.browserBattleMessage)return;
+ if(this.browserTroopEvent){
+  if(Opal.BattleManager['$action_forced?']()){
+   this.resumingForcedAction=true;
+   try{this.$process_forced_action();}finally{this.resumingForcedAction=false;}
+  }
+  return;
+ }
  if(troop['$all_dead?']())this.$wait_for_effect();
  this.$process_forced_action();Opal.BattleManager.$judge_win_loss();
+};
+// RGSS blocks the caller during a troop event. The browser resumes it next frame.
+const startPartySelection=battleWindowHost.$start_party_command_selection;
+battleWindowHost.$start_party_command_selection=function(){
+ if(this.browserTroopEvent||this.browserBattleMessage){this.resumePartySelection=true;return;}
+ return startPartySelection.call(this);
+};
+const processBattleAction=battleWindowHost.$process_action;
+battleWindowHost.$process_action=function(){
+ if(!this.resumingForcedAction && (this.browserTroopEvent||this.browserBattleMessage))return;
+ return processBattleAction.call(this);
+};
+const judgeBattle=Opal.BattleManager.$judge_win_loss;
+Opal.BattleManager.$judge_win_loss=function(){
+ const scene=Opal.SceneManager.$scene(),troop=G.game_troop;
+ if(scene?.$$class===Opal.Scene_Battle && Opal.truthy(this.phase) && !this['$aborting?']()){
+  const interpreter=troop.$interpreter();
+  if(troop['$all_dead?']() && !scene['$scene_changing?']() && !interpreter['$running?']() &&
+     troop.$troop().$pages().some(page=>page.$condition().$enemy_valid() && page.$span()!==2 && troop['$conditions_met?'](page))){
+   troop.$setup_battle_event();
+  }
+  if(interpreter['$running?']()){scene.browserTroopEvent=true;return false;}
+ }
+ return judgeBattle.call(this);
 };
 const updateBattleScene=battleWindowHost.$update;
 battleWindowHost.$update=function(){
@@ -144,5 +175,6 @@ battleWindowHost.$update=function(){
   this.$process_event();
   return;
  }
+ if(this.resumePartySelection){this.resumePartySelection=false;this.$start_party_command_selection();return;}
  return updateBattleScene.call(this);
 };

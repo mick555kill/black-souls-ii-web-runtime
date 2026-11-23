@@ -37,6 +37,28 @@ proto.$update=function(){
      if(!started){started=true;Opal.gvars.game_temp['$fade_type='](p[5]);player.$reserve_transfer(id,x,y,p[4]);}
      return !player['$transfer?']();};break;
    }
+   case 204:{
+    const map=Opal.gvars.game_map;
+    if(Opal.gvars.game_party.$in_battle())break;
+    const start=()=>{if(map['$scrolling?']())return false;map.$start_scroll(...p);return true;};
+    if(!start())this.pending=start;
+    break;
+   }
+   case 339:{
+    const targets=[];
+    Opal.send(this,'iterate_battler',p.slice(0,2),battler=>targets.push(battler));
+    let index=0;
+    this.pending=()=>{
+     if(Opal.BattleManager['$action_forced?']())return false;
+     while(index<targets.length){
+      const target=targets[index++];
+      if(target['$death_state?']())continue;
+      target.$force_action(p[2],p[3]);Opal.BattleManager.$force_action(target);return false;
+     }
+     return true;
+    };
+    break;
+   }
    case 205:{
     if(Opal.gvars.game_map.$need_refresh())Opal.gvars.game_map.$refresh();
     const ch=this.$get_character(p[0]);
