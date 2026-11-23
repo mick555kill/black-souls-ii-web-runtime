@@ -642,8 +642,8 @@
       return $$('RGSSWeb').$host().$flash("Sprite", self.id, ($truthy(color) ? (color.$css()) : (nil)), duration.$to_i(), $$('Graphics').$frame_count())
     });
     self.$attr_reader("id", "bitmap", "x", "y", "z", "visible", "opacity", "zoom_x", "zoom_y", "ox", "oy");
-    self.$attr_reader("src_rect", "viewport", "angle", "mirror");
-    self.$attr_accessor("tone", "color", "blend_type", "bush_depth", "wave_amp", "wave_length", "wave_speed", "wave_phase");
+    self.$attr_reader("src_rect", "viewport", "angle", "mirror", "blend_type");
+    self.$attr_accessor("tone", "color", "bush_depth", "wave_amp", "wave_length", "wave_speed", "wave_phase");
     
     $def(self, '$initialize', function $$initialize(viewport) {
       var $a, self = this;
@@ -659,7 +659,7 @@
         
         if (r == null) r = nil;
         return $$('RGSSWeb').$host().$spriteCrop(self.id, r.$x(), r.$y(), r.$width(), r.$height());}, {$$s: self});
-      self.ox = (self.oy = (self.angle = 0));
+      self.blend_type = self.ox = (self.oy = (self.angle = 0));
       self.zoom_x = (self.zoom_y = 1);
       self.tone = $$('Tone').$new();
       self.color = $$('Color').$new(0, 0, 0, 0);
@@ -692,7 +692,7 @@
       self.src_rect.$set(0, 0, ($truthy(value) ? (value.$width()) : (0)), ($truthy(value) ? (value.$height()) : (0)));
       return $$('RGSSWeb').$host().$spriteSet(self.id, "bitmap", ($truthy(value) ? (value.$id()) : (-1)));
     });
-    $send(["x", "y", "z", "opacity", "zoom_x", "zoom_y", "visible", "ox", "oy", "angle", "mirror"], 'each', [], function $Sprite$13(prop){var self = $Sprite$13.$$s == null ? this : $Sprite$13.$$s;
+    $send(["x", "y", "z", "opacity", "zoom_x", "zoom_y", "visible", "ox", "oy", "angle", "mirror", "blend_type"], 'each', [], function $Sprite$13(prop){var self = $Sprite$13.$$s == null ? this : $Sprite$13.$$s;
 
       
       if (prop == null) prop = nil;
@@ -31081,7 +31081,7 @@
           } finally { Opal.pop_exception(); }
         } else { throw $err; }
       };;
-      if ($eqeq(bitmap, nil)) {
+      if ($eqeq(bitmap, nil) || bitmap.$width() < 48 || bitmap.$height() < 48) {
         
         bitmap = $$('Cache').$face(actor.$face_name());
         face_rect = $$('Rect').$new($rb_times(actor.$face_index()['$%'](4), 96), $rb_times(actor.$face_index().$div(4), 96), 96, 96);

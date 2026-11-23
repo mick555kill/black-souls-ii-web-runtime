@@ -21,23 +21,103 @@
     }
     makeBitmap(id,w,h){
       const canvas=this.canvasOf(w,h);
-      this.bitmaps.set(id,{canvas,ctx:canvas.getContext('2d'),width:w,height:h,ready:true,pending:[]});
+      this.bitmaps.set(id,{canvas,ctx:canvas.getContext('2d'),width:w,height:h,ready:true,tail:null});
     }
-    async loadBitmap(id,path){
+    async loadBitmap(bitmap,path){
       const project=this.getProject();
       if(!project)return;
       const match=/^(?:Graphics\/)?([^/]+)\/(.+)$/i.exec(String(path));
       if(!match)return;
       const image=await project.image(match[1],match[2]);
       if(!image)return;
-      if(!this.bitmaps.has(id))return;
-      const bitmap=this.bitmaps.get(id);
       const cv=this.canvasOf(image.width,image.height);
       cv.getContext('2d').drawImage(image,0,0);
       bitmap.canvas=cv;bitmap.ctx=cv.getContext('2d');bitmap.width=image.width;bitmap.height=image.height;
-      bitmap.ready=true;
-      for(const operation of bitmap.pending.splice(0))operation();
-      if(this.enabled)this.render();
+    }
+    drawBitmap(op,args,b,src){
+      switch(op){
+        case 'bitmap-copy':b.ctx.drawImage(src.canvas,0,0);return;
+        case 'bitmap-hue':{
+          const shift=((args[1]%360)+360)%360/60;
+          if(!shift)return;
+          const pixels=b.ctx.getImageData(0,0,b.width,b.height),d=pixels.data;
+          for(let i=0;i<d.length;i+=4){
+            const r=d[i],g=d[i+1],blue=d[i+2],max=Math.max(r,g,blue),min=Math.min(r,g,blue),c=max-min;
+            if(!c||!d[i+3])continue;
+            const h=((max===r?(g-blue)/c:max===g?2+(blue-r)/c:4+(r-g)/c)+shift+6)%6;
+            const x=c*(1-Math.abs(h%2-1));
+            d[i]=min+(h<1||h>=5?c:h<2||h>=4?x:0);
+            d[i+1]=min+(h>=1&&h<3?c:h<1||h<4&&h>=3?x:0);
+            d[i+2]=min+(h>=3&&h<5?c:h>=2&&h<3||h>=5?x:0);
+          }
+          b.ctx.putImageData(pixels,0,0);
+          return;
+        }
+        case 'bitmap-radial-blur':{
+          const [id,angle,count]=args;
+          const steps=Math.max(2,Math.min(100,count|0)),copy=this.canvasOf(b.width,b.height);
+          copy.getContext('2d').drawImage(b.canvas,0,0);
+          const ctx=b.ctx;ctx.save();ctx.clearRect(0,0,b.width,b.height);ctx.translate(b.width/2,b.height/2);
+          ctx.globalCompositeOperation='lighter';ctx.globalAlpha=1/steps;
+          for(let i=0;i<steps;i++){
+            ctx.save();ctx.rotate((i/(steps-1)-0.5)*angle*Math.PI/180);ctx.drawImage(copy,-b.width/2,-b.height/2);ctx.restore();
+          }
+          ctx.restore();return;
+        }
+        case 'bitmap-blur':{
+          const copy=this.canvasOf(b.width,b.height);
+          copy.getContext('2d').drawImage(b.canvas,0,0);
+          b.ctx.save();b.ctx.clearRect(0,0,b.width,b.height);b.ctx.filter='blur(1px)';
+          b.ctx.drawImage(copy,0,0);b.ctx.restore();return;
+        }
+        case 'bitmap-clear-rect':{
+          const [id,x,y,w,h]=args;b.ctx.clearRect(x,y,w,h);return;
+        }
+        case 'bitmap-clear':{
+          b.ctx.clearRect(0,0,b.width,b.height);return;
+        }
+        case 'bitmap-fill':{
+          const [id,x,y,w,h,color]=args;
+          if(b){b.ctx.fillStyle=String(color);b.ctx.fillRect(x,y,w,h);}return;
+        }
+        case 'bitmap-gradient':{
+          const [id,x,y,w,h,color1,color2,vertical]=args;
+          if(b){const gradient=b.ctx.createLinearGradient(x,y,x+(vertical?0:w),y+(vertical?h:0));
+            gradient.addColorStop(0,String(color1));gradient.addColorStop(1,String(color2));
+            b.ctx.fillStyle=gradient;b.ctx.fillRect(x,y,w,h);}return;
+        }
+        case 'bitmap-text':{
+          const [id,x,y,w,h,text,align,font,size,color,bold,italic,outline,outColor]=args;
+          if(b){
+            b.ctx.fillStyle=String(color);b.ctx.font=fontStyle(font||'Arial',size||24,bold,italic);
+            b.ctx.textBaseline='middle';b.ctx.textAlign=align===1?'center':align===2?'right':'left';
+            if(outline){b.ctx.strokeStyle=outColor;b.ctx.lineWidth=2;b.ctx.lineJoin="round";b.ctx.strokeText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);}
+            b.ctx.fillText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);
+          }return;
+        }
+        case 'bitmap-blt':{
+          const [id,x,y,source,sx,sy,w,h,opacity]=args;
+          b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,w,h,x,y,w,h);b.ctx.restore();return;
+        }
+        case 'bitmap-stretch-blt':{
+          const [id,x,y,w,h,source,sx,sy,sw,sh,opacity]=args;
+          b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,sw||src.width,sh||src.height,x,y,w,h);b.ctx.restore();return;
+        }
+      }
+    }
+    queueBitmap(op,args){
+      const b=this.bitmaps.get(args[0]);
+      const slot={'bitmap-copy':1,'bitmap-blt':3,'bitmap-stretch-blt':5}[op];
+      const src=slot===undefined?null:this.bitmaps.get(args[slot]);
+      if(!b || (slot!==undefined&&!src))return;
+      const resources=src&&src!==b?[b,src]:[b];
+      const waits=resources.map(bitmap=>bitmap.tail).filter(Boolean);
+      const draw=()=>this.drawBitmap(op,args,b,src);
+      if(!waits.length){draw();return;}
+      // Retain the original surfaces across dispose and order later reads and writes.
+      const tail=Promise.all(waits).then(draw).catch(e=>console.warn('Bitmap draw:',e));
+      for(const bitmap of resources)bitmap.tail=tail;
+      tail.then(()=>{for(const bitmap of resources)if(bitmap.tail===tail)bitmap.tail=null;});
     }
     handle({op,args=[]}){
       switch(op){
@@ -60,10 +140,9 @@
           const [id,path]=args;
           this.makeBitmap(id,1,1);
           const bitmap=this.bitmaps.get(id);bitmap.ready=false;
-          this.loadBitmap(id,path).catch(e=>console.warn('Bitmap load:',e)).finally(()=>{
-            if(!this.bitmaps.has(id))return;
-            if(!bitmap.ready){bitmap.ready=true;for(const draw of bitmap.pending.splice(0))draw();}
-          });
+          const tail=this.loadBitmap(bitmap,path).catch(e=>console.warn('Bitmap load:',e));
+          bitmap.tail=tail;
+          tail.then(()=>{bitmap.ready=true;if(bitmap.tail===tail)bitmap.tail=null;});
           return;
         }
         case 'bitmap-dispose':this.bitmaps.delete(args[0]);return;
@@ -71,84 +150,6 @@
           const b=this.bitmaps.get(args[0]);
           if(b){this.render();b.ctx.drawImage(this.canvas,0,0);}
           return;
-        }
-        case 'bitmap-copy':{
-          const b=this.bitmaps.get(args[0]),src=this.bitmaps.get(args[1]);
-          if(!b||!src)return;
-          b.ready=false;
-          const copy=()=>{b.ctx.drawImage(src.canvas,0,0);b.ready=true;for(const draw of b.pending.splice(0))draw();};
-          if(src.ready)copy();else src.pending.push(copy);return;
-        }
-        case 'bitmap-hue':{
-          const b=this.bitmaps.get(args[0]),shift=((args[1]%360)+360)%360/60;
-          if(!b||!shift)return;
-          const tint=()=>{
-            const pixels=b.ctx.getImageData(0,0,b.width,b.height),d=pixels.data;
-            for(let i=0;i<d.length;i+=4){
-              const r=d[i],g=d[i+1],blue=d[i+2],max=Math.max(r,g,blue),min=Math.min(r,g,blue),c=max-min;
-              if(!c||!d[i+3])continue;
-              const h=((max===r?(g-blue)/c:max===g?2+(blue-r)/c:4+(r-g)/c)+shift+6)%6;
-              const x=c*(1-Math.abs(h%2-1));
-              d[i]=min+(h<1||h>=5?c:h<2||h>=4?x:0);
-              d[i+1]=min+(h>=1&&h<3?c:h<1||h<4&&h>=3?x:0);
-              d[i+2]=min+(h>=3&&h<5?c:h>=2&&h<3||h>=5?x:0);
-            }
-            b.ctx.putImageData(pixels,0,0);
-          };
-          if(b.ready)tint();else b.pending.push(tint);return;
-        }
-        case 'bitmap-radial-blur':{
-          const [id,angle,count]=args,b=this.bitmaps.get(id);if(!b)return;
-          const steps=Math.max(2,Math.min(100,count|0)),copy=this.canvasOf(b.width,b.height);
-          copy.getContext('2d').drawImage(b.canvas,0,0);
-          const ctx=b.ctx;ctx.save();ctx.clearRect(0,0,b.width,b.height);ctx.translate(b.width/2,b.height/2);
-          ctx.globalCompositeOperation='lighter';ctx.globalAlpha=1/steps;
-          for(let i=0;i<steps;i++){
-            ctx.save();ctx.rotate((i/(steps-1)-0.5)*angle*Math.PI/180);ctx.drawImage(copy,-b.width/2,-b.height/2);ctx.restore();
-          }
-          ctx.restore();return;
-        }
-        case 'bitmap-blur':{
-          const b=this.bitmaps.get(args[0]);if(!b)return;
-          const copy=this.canvasOf(b.width,b.height);
-          copy.getContext('2d').drawImage(b.canvas,0,0);
-          b.ctx.save();b.ctx.clearRect(0,0,b.width,b.height);b.ctx.filter='blur(1px)';
-          b.ctx.drawImage(copy,0,0);b.ctx.restore();return;
-        }
-        case 'bitmap-clear-rect':{
-          const [id,x,y,w,h]=args;this.bitmaps.get(id)?.ctx.clearRect(x,y,w,h);return;
-        }
-        case 'bitmap-clear':{
-          const b=this.bitmaps.get(args[0]);if(b)b.ctx.clearRect(0,0,b.width,b.height);return;
-        }
-        case 'bitmap-fill':{
-          const [id,x,y,w,h,color]=args,b=this.bitmaps.get(id);
-          if(b){b.ctx.fillStyle=String(color);b.ctx.fillRect(x,y,w,h);}return;
-        }
-        case 'bitmap-gradient':{
-          const [id,x,y,w,h,color1,color2,vertical]=args,b=this.bitmaps.get(id);
-          if(b){const gradient=b.ctx.createLinearGradient(x,y,x+(vertical?0:w),y+(vertical?h:0));
-            gradient.addColorStop(0,String(color1));gradient.addColorStop(1,String(color2));
-            b.ctx.fillStyle=gradient;b.ctx.fillRect(x,y,w,h);}return;
-        }
-        case 'bitmap-text':{
-          const [id,x,y,w,h,text,align,font,size,color,bold,italic,outline,outColor]=args,b=this.bitmaps.get(id);
-          if(b){
-            b.ctx.fillStyle=String(color);b.ctx.font=fontStyle(font||'Arial',size||24,bold,italic);
-            b.ctx.textBaseline='middle';b.ctx.textAlign=align===1?'center':align===2?'right':'left';
-            if(outline){b.ctx.strokeStyle=outColor;b.ctx.lineWidth=2;b.ctx.lineJoin="round";b.ctx.strokeText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);}
-            b.ctx.fillText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);
-          }return;
-        }
-        case 'bitmap-blt':{
-          const [id,x,y,source,sx,sy,w,h,opacity]=args,b=this.bitmaps.get(id),src=this.bitmaps.get(source);
-          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,w,h,x,y,w,h);b.ctx.restore();};
-            if(src.ready)draw();else src.pending.push(draw);}return;
-        }
-        case 'bitmap-stretch-blt':{
-          const [id,x,y,w,h,source,sx,sy,sw,sh,opacity]=args,b=this.bitmaps.get(id),src=this.bitmaps.get(source);
-          if(b&&src){const draw=()=>{b.ctx.save();b.ctx.globalAlpha=(opacity??255)/255;b.ctx.drawImage(src.canvas,sx,sy,sw||src.width,sh||src.height,x,y,w,h);b.ctx.restore();};
-            if(src.ready)draw();else src.pending.push(draw);}return;
         }
         case 'tile-table':{
           const [id,kind,bytes]=args, tilemap=this.tilemaps.get(id)||{};
@@ -172,7 +173,7 @@
         case 'sprite-crop':{
           const sprite=this.sprites.get(args[0]);if(sprite)sprite.crop=args.slice(1);return;
         }
-        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
+        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,blend_type:0,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
         case 'sprite-set':{
           const [id,key,value]=args,s=this.sprites.get(id);
           if(s&&Object.prototype.hasOwnProperty.call(s,String(key))){s[String(key)]=value;if(key==='bitmap')s.crop=null;}
@@ -180,7 +181,8 @@
         }
         case 'sprite-dispose':this.sprites.delete(args[0]);return;
         case 'audio':this.audio(...args).catch(e=>console.warn('RGSS3 audio:',e.message));return;
-        default:console.warn('Unknown RGSS3 display command:',op);
+        default:if(op.startsWith('bitmap-'))return this.queueBitmap(op,args);
+          console.warn('Unknown RGSS3 display command:',op);
       }
     }
     frame(){
@@ -212,6 +214,7 @@
         }
         if(s.window){this.drawWindow(c,s,b);c.restore();continue;}
         c.globalAlpha=Math.max(0,Math.min(1,Number(s.opacity)/255));
+        if(s.blend_type===1)c.globalCompositeOperation='lighter';
         const [sx,sy,w,h]=s.crop || [0,0,b.width,b.height];
         if(w>0 && h>0 && s.zoom_x && s.zoom_y){
           if(s.angle || s.mirror){

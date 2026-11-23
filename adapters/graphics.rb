@@ -313,8 +313,8 @@ class Sprite
     RGSSWeb.host.flash('Sprite', @id, color ? color.css : nil, duration.to_i, Graphics.frame_count)
   end
   attr_reader :id, :bitmap, :x, :y, :z, :visible, :opacity, :zoom_x, :zoom_y, :ox, :oy
-  attr_reader :src_rect, :viewport, :angle, :mirror
-  attr_accessor :tone, :color, :blend_type,
+  attr_reader :src_rect, :viewport, :angle, :mirror, :blend_type
+  attr_accessor :tone, :color,
                 :bush_depth, :wave_amp, :wave_length, :wave_speed, :wave_phase
   def initialize(viewport = nil)
     @id = RGSSWeb.host.spriteCreate.to_i
@@ -323,7 +323,7 @@ class Sprite
     @src_rect = Rect.new.on_change do |r|
       RGSSWeb.host.spriteCrop(@id, r.x, r.y, r.width, r.height)
     end
-    @ox = @oy = @angle = 0
+    @blend_type = @ox = @oy = @angle = 0
     @zoom_x = @zoom_y = 1.0
     @tone = Tone.new
     @color = Color.new(0,0,0,0)
@@ -341,7 +341,7 @@ class Sprite
     @src_rect.set(0,0,value ? value.width : 0,value ? value.height : 0)
     RGSSWeb.host.spriteSet(@id,'bitmap',value ? value.id : -1)
   end
-  %i[x y z opacity zoom_x zoom_y visible ox oy angle mirror].each do |prop|
+  %i[x y z opacity zoom_x zoom_y visible ox oy angle mirror blend_type].each do |prop|
     define_method("#{prop}=") do |value|
       instance_variable_set("@#{prop}",value)
       RGSSWeb.host.spriteSet(@id,prop.to_s,value)

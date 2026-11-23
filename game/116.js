@@ -94,7 +94,7 @@
           } finally { Opal.pop_exception(); }
         } else { throw $err; }
       };;
-      if ($eqeq(bitmap, nil)) {
+      if ($eqeq(bitmap, nil) || bitmap.$width() < 48 || bitmap.$height() < 48) {
         
         bitmap = $$('Cache').$face(actor.$face_name());
         face_rect = $$('Rect').$new($rb_times(actor.$face_index()['$%'](4), 96), $rb_times(actor.$face_index().$div(4), 96), 96, 96);
