@@ -13,6 +13,7 @@ async function loadMapData(id){
 }
 function tick(t){
  if(!active)return;
+ if(cheatMenu.open){requestAnimationFrame(tick);return;}
  try{
   if(t-frameTime>=15){
    frameTime=t;const current=Opal.SceneManager.$scene();
@@ -23,6 +24,7 @@ function tick(t){
    if(current!==scene){
     if(scene){scene.$pre_terminate();scene.$terminate();}
     scene=current;scene.$start();scene.$post_start();
+    cheatMenu.hidden=![Opal.Scene_Map,Opal.Scene_Battle].includes(scene.$$class);
 
    }
    scene.$update();display.render();
@@ -68,7 +70,7 @@ function setPointer(id,key){
 }
 onkeydown=e=>{
  const key=keys[e.key];
- if(!active || !key || e.target.closest?.('.pad-settings') || (e.key==='Enter' && e.target.closest?.('.volume')))return;
+ if(!active || !key || cheatMenu.open || e.target.closest?.('.cheats') || e.target.closest?.('.pad-settings') || (e.key==='Enter' && e.target.closest?.('.volume')))return;
  e.preventDefault();keyboard.set(e.code,key);syncKey(key);
 };
 onkeyup=e=>{
