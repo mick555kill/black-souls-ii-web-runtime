@@ -14,7 +14,7 @@
     constructor(source, opts = {}) {
       this.source = source; this.archive = source; this.decode = opts.decode || defaultDecode;
       this.maps = {}; this.tilesets = []; this.system = null; this.actors = []; this.commonEvents = [];
-      this.imageCache = new Map(); this.missing = new Set();
+      this.imageCache = new Map(); this.imageCacheBytes=0; this.imageCacheLimit=32*1024*1024; this.imageCacheCount=96; this.missing = new Set();
     }
     async data(name) {
       return new (VX().MarshalReader)(await this.source.read(`Data/${name}.rvdata2`)).parse(); }
@@ -39,11 +39,21 @@
       if (map.width < 1 || map.height < 1 || map.width > 5000 || map.height > 5000) throw Error('Invalid map dimensions');
       return map;
     }
+    trimImages() {
+      for(const [key,entry] of this.imageCache){
+        if(this.imageCacheBytes<=this.imageCacheLimit && this.imageCache.size<=this.imageCacheCount)break;
+        if(!entry.settled)continue;
+        this.imageCache.delete(key);this.imageCacheBytes-=entry.bytes;
+        // Consumers may still hold the decoded image; don't close it here.
+      }
+    }
     /** folder e.g. 'Tilesets', 'Characters', 'Faces', 'Parallaxes'; resolves to an image or null (recorded in .missing) */
     image(folder, name) {
       if (!name) return Promise.resolve(null);
       const key = `${folder}/${name}`;
-      if (this.imageCache.has(key)) return this.imageCache.get(key);
+      if (this.imageCache.has(key)) {
+        const hit=this.imageCache.get(key);this.imageCache.delete(key);this.imageCache.set(key,hit);return hit.promise;
+      }
       const promise = (async () => {
         const candidates=/\.(png|jpe?g)$/i.test(name)?[name]:IMG_EXT.map(ext=>name+'.'+ext);
         for (const file of candidates) {
@@ -54,7 +64,11 @@
         this.missing.add(`Graphics/${folder}/${name}`);
         return null;
       })();
-      this.imageCache.set(key, promise);
+      const entry={promise,settled:false,bytes:0};this.imageCache.set(key,entry);
+      promise.then(image=>{
+        entry.settled=true;entry.bytes=image?image.width*image.height*4:0;
+        this.imageCacheBytes+=entry.bytes;this.trimImages();
+      },()=>{this.imageCache.delete(key);});
       return promise;
     }
     async sheetsFor(map) {
