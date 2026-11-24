@@ -145,6 +145,7 @@
       this.volumePercent=100;this.fadeAlpha=0;this.enabled=false;
       this.maxBitmapPixels=4096*4096;
       this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
+      this.gpuUnavailable=typeof URLSearchParams!=='undefined' && new URLSearchParams(root.location?.search||'').get('renderer')==='canvas2d';
     }
     canvasOf(w,h){
       const sizeW=Number(w),sizeH=Number(h);
@@ -279,7 +280,10 @@
           tail.then(()=>{bitmap.ready=true;bitmap.version++;if(bitmap.tail===tail)bitmap.tail=null;});
           return;
         }
-        case 'bitmap-dispose':this.bitmaps.delete(args[0]);return;
+        case 'bitmap-dispose':{
+          const bitmap=this.bitmaps.get(args[0]);if(bitmap)this.gpu?.forget(bitmap.canvas);
+          this.bitmaps.delete(args[0]);return;
+        }
         case 'bitmap-snapshot':{
           const b=this.bitmaps.get(args[0]);
           if(b){this.render();b.ctx.drawImage(this.canvas,0,0);b.version++;}
