@@ -3,10 +3,28 @@
 const sceneYield=Symbol('scene yield');
 let handlingSceneCommand=false;
 const proto=Opal.Game_Interpreter.$$prototype;
-proto.$create_fiber=function(){this.fiber=this.list===Opal.nil?Opal.nil:true;this.pending=null;};
+proto.$create_fiber=function(){
+ this.fiber=this.list===Opal.nil?Opal.nil:true;
+ this.pending=null;this.commandWait=null;this.childEvent=null;
+};
+// Parallel map events also run while the player walks. Keep their remaining wait in the save graph.
+function commandStillWaiting(wait){
+ switch(wait[0]){
+  case 205:return wait[1].$move_route_forcing();
+  case 212:return wait[1].$animation_id()>0;
+  case 213:return wait[1].$balloon_id()>0;
+  case 230:return --wait[1]>0;
+ }
+}
 proto.$update=function(){
  if(this.fiber===Opal.nil)return;
  if(this.pending){if(!this.pending())return;this.pending=null;}
+ if(this.commandWait){if(commandStillWaiting(this.commandWait))return;this.commandWait=null;}
+ if(this.childEvent){
+  this.childEvent.$update();
+  if(this.childEvent['$running?']())return;
+  this.childEvent=null;
+ }
  for(let budget=0;budget<128 && this.index<this.list.length;budget++){
   const command=this.list[this.index], code=command.$code(), p=command.$parameters();
   this.params=p;this.indent=command.$indent();
@@ -47,20 +65,19 @@ proto.$update=function(){
    case 205:{
     if(Opal.gvars.game_map.$need_refresh())Opal.gvars.game_map.$refresh();
     const ch=this.$get_character(p[0]);
-    if(ch!==Opal.nil){ch.$force_move_route(p[1]);if(p[1].$wait())this.pending=()=>!ch.$move_route_forcing();}
+    if(ch!==Opal.nil){ch.$force_move_route(p[1]);if(p[1].$wait())this.commandWait=[code,ch];}
     break;
    }
    case 212:case 213:{
     const ch=this.$get_character(p[0]),field=code===212?'animation_id':'balloon_id';
-    if(ch!==Opal.nil){ch['$'+field+'='](p[1]);if(p[2])this.pending=()=>ch['$'+field]()<=0;}
+    if(ch!==Opal.nil){ch['$'+field+'='](p[1]);if(p[2])this.commandWait=[code,ch];}
     break;
    }
    case 117:{
-    const child=Opal.Game_Interpreter.$new(this.depth+1);
-    child.$setup(Opal.gvars.data_common_events[p[0]].$list(),this.event_id);
-    this.pending=()=>{child.$update();return !child['$running?']();};break;
+    this.childEvent=Opal.Game_Interpreter.$new(this.depth+1);
+    this.childEvent.$setup(Opal.gvars.data_common_events[p[0]].$list(),this.event_id);break;
    }
-   case 230:{let frames=p[0];this.pending=()=>--frames<=0;break;}
+   case 230:this.$wait(p[0]);break;
    case 221:case 222:{
     const from=Opal.Graphics.$brightness(),to=code===221?0:255;let elapsed=0;
     this.pending=()=>{Opal.Graphics['$brightness='](Math.round(from+(to-from)*(++elapsed/30)));return elapsed>=30;};break;
@@ -69,11 +86,11 @@ proto.$update=function(){
    default:this.$execute_command();
   }
   this.index++;
-  if(this.pending)return;
+  if(this.pending||this.commandWait||this.childEvent)return;
  }
  if(this.index>=this.list.length)this.fiber=Opal.nil;
 };
-proto.$wait=function(frames){this.pending=()=>--frames<=0;};
+proto.$wait=function(frames){this.commandWait=[230,frames];};
 proto.$wait_for_message=function(){};
 const fiberClass=Opal.klass(Opal.Object,Opal.Object,'Fiber');
 Opal.defs(fiberClass,'$yield',()=>{if(handlingSceneCommand)throw sceneYield;throw Error('This command needs a resumable Fiber adapter');});
