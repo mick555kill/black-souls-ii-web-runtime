@@ -57,6 +57,7 @@ body.playing :is(input:not([type=file]),textarea,[contenteditable=true]){
 #crt-screen{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#crt-screen[hidden]{display:none}.slider-panel .crt-option{align-items:center;justify-content:flex-start;margin-top:6px}.crt-option input[type=checkbox]{flex:none;width:20px;height:20px}
 #thai-caption{position:absolute;z-index:1;left:50%;transform:translateX(-50%);top:12%;width:max-content;max-width:88%;max-height:44%;overflow:auto;background:#120f13ee;color:#fff6e4;border:1px solid #897953;border-radius:5px;padding:.4em .75em;white-space:pre-line;overflow-wrap:anywhere;font:500 clamp(14px,2.6vmin,23px)/1.45 system-ui,sans-serif}
 #thai-caption.low{top:auto;bottom:14%}#thai-model{font-size:.85em;margin-top:6px}#thai-info{display:block;font-size:.82em}
+#autosave-status{position:absolute;left:8px;top:8px;z-index:3;pointer-events:none;background:#171614eb;color:#ffe8b8;border-radius:4px;padding:4px 9px;font-size:.85rem}
 </style>
 <div class="toolbar"><details id="cheats" class="cheats" hidden><summary>สูตรโกง</summary>
 <div class="cheat-panel">
@@ -69,6 +70,7 @@ body.playing :is(input:not([type=file]),textarea,[contenteditable=true]){
 <main><h1>Black Souls II</h1>
 <label class="pick" id="picker">เลือกโฟลเดอร์เกม <input id="folder" type="file" webkitdirectory multiple></label>
 <div class="stage"><canvas width="544" height="416" id="screen" tabindex="0" aria-label="หน้าจอเกม"></canvas><canvas id="crt-screen" hidden aria-hidden="true"></canvas>
+  <output id="autosave-status" role="status" hidden></output>
   <div id="thai-caption" lang="th" aria-live="polite" hidden></div>
   <div class="pad" role="group" aria-label="ปุ่มควบคุมเกม">
     <div class="directions" role="group" aria-label="D-pad สี่ทิศ">
@@ -85,4 +87,4 @@ body.playing :is(input:not([type=file]),textarea,[contenteditable=true]){
   </div>
 </div>
 <p id="status" role="status">เลือกโฟลเดอร์ BLACK SOULS II ที่แตกแล้ว ซึ่งมี Game.rgss3a</p><small>ลูกศรเพื่อเดิน · Shift ค้างเพื่อวิ่ง · Enter/Z ยืนยัน · Esc/X ย้อนกลับ</small></main>
-<script src="web/pad-settings.js"></script><script src="vendor/opal.js?v=damage-popup-1"></script><script src="vendor/compiler.js"></script><script src="adapters/generated.js"></script><script src="web/host.js?v=vx-event-buttons"></script><script src="web/images.js"></script><script src="web/definitions.js?v=water-crt-1"></script><script src="web/archive.js"></script><script src="web/assets.js"></script><script src="web/marshal.js"></script><script src="web/autotile.js?v=water-crt-1"></script><script src="web/project.js"></script><script src="web/rgss3-display.js?v=water-crt-1"></script><script src="web/data.js?v=battle-voice-1"></script><script src="web/formulas.js"></script><script src="web/saves.js"></script><script src="web/events.js?v=rabbit-atb-2"></script><script src="web/thai-lines.js"></script><script src="web/thai.js"></script><script src="web/native-ui.js?v=rabbit-atb-2"></script><script src="web/crt.js?v=phosphor-2"></script><script src="web/player.js?v=phosphor-2"></script><script src="web/cheats.js"></script></html>
+<script src="web/pad-settings.js"></script><script src="vendor/opal.js?v=damage-popup-1"></script><script src="vendor/compiler.js"></script><script src="adapters/generated.js"></script><script src="web/host.js?v=vx-event-buttons"></script><script src="web/images.js"></script><script src="web/definitions.js?v=water-crt-1"></script><script src="web/archive.js"></script><script src="web/assets.js"></script><script src="web/marshal.js"></script><script src="web/autotile.js?v=water-crt-1"></script><script src="web/project.js"></script><script src="web/rgss3-display.js?v=water-crt-1"></script><script src="web/data.js?v=battle-voice-1"></script><script src="web/formulas.js"></script><script src="web/saves.js?v=autosave-1"></script><script src="web/autosave.js?v=autosave-1"></script><script src="web/events.js?v=autosave-1"></script><script src="web/thai-lines.js"></script><script src="web/thai.js"></script><script src="web/native-ui.js?v=rabbit-atb-2"></script><script src="web/crt.js?v=phosphor-2"></script><script src="web/player.js?v=autosave-1"></script><script src="web/cheats.js"></script></html>

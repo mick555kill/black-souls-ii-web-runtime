@@ -1,6 +1,11 @@
 'use strict';
 const el=id=>document.getElementById(id);
 let project,scene,active=false,frameTime=0;
+let autosaveNoticeTimer;
+autosave.notify=text=>{
+ const notice=el('autosave-status');notice.textContent=text;notice.hidden=false;
+ clearTimeout(autosaveNoticeTimer);autosaveNoticeTimer=setTimeout(()=>{notice.hidden=true;},2600);
+};
 globalThis.display=new VX.RGSS3Display(el('screen'),()=>project);
 hostMethods.resize(Opal.Graphics.$width(),Opal.Graphics.$height());
 function errorMessage(error){
@@ -29,6 +34,7 @@ function tick(t){
    }
    scene.$update();display.render();
    crt.draw();
+   autosave.update(scene,t);
   }
   requestAnimationFrame(tick);
  }catch(e){errorMessage(e);}
@@ -43,7 +49,7 @@ el('folder').onchange=async e=>{
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
-  project=await new VX.Project(source).initialize();await prepareDatabase(project);
+  project=await new VX.Project(source).initialize();await Promise.all([prepareDatabase(project),autosave.prepare()]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
   display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();requestAnimationFrame(tick);
  }catch(e){el('folder').disabled=false;errorMessage(e);}
@@ -81,7 +87,9 @@ function releaseControls(){
  for(const button of padButtons)button.classList.remove('pressed');
 }
 onblur=releaseControls;
-document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls()});
+function leavePage(){releaseControls();if(active)autosave.update(scene,performance.now(),true);}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)leavePage();});
+window.addEventListener('pagehide',leavePage);
 // A native long-press menu or selection can interrupt a held game input on iPad.
 for(const eventName of ['contextmenu','selectstart']){
  document.addEventListener(eventName,event=>{

@@ -1,4 +1,5 @@
 // Preserve RGSS class identities, Hash keys, and shared references in each browser save.
+class PendingSaveAction extends Error {}
 function packSave(root){
  const nodes=[],ids=new Map();
  function encode(value){
@@ -6,7 +7,7 @@ function packSave(root){
   if(value===Opal.nil)return null;
   if(['number','boolean','string'].includes(typeof value))return value;
   if(value instanceof String)return String(value);
-  if(typeof value==='function')throw Error('Cannot save while a scripted action is pending');
+  if(typeof value==='function')throw new PendingSaveAction('Cannot save while a scripted action is pending');
   if(ids.has(value))return [ids.get(value)];
   const id=nodes.length,node={};ids.set(value,id);nodes.push(node);
   if(Array.isArray(value)){node.type='array';node.data=value.map(encode);}
@@ -39,11 +40,21 @@ function unpackSave(graph){
 }
 const saveKey=i=>'bs2.rgss.save.v1.'+i;
 const dm=Opal.DataManager;
-function readSlot(i){const raw=localStorage.getItem(saveKey(i));return raw?JSON.parse(raw):null;}
+const AUTOSAVE_SLOT=-1;
+let autosaveRecord=null;
+function readSlot(i){
+ if(i===AUTOSAVE_SLOT)return autosaveRecord;
+ const raw=localStorage.getItem(saveKey(i));return raw?JSON.parse(raw):null;
+}
+function makeSaveRecord(automatic=false){
+ const system=Opal.gvars.game_system,count=system.save_count;
+ try{system.$on_before_save();}finally{if(automatic)system.save_count=count;}
+ return {time:Date.now(),header:packSave(dm.$make_save_header()),body:packSave(dm.$make_save_contents())};
+}
 dm.$save_game=function(i){
+ if(i===AUTOSAVE_SLOT)return false;
  try{
-  Opal.gvars.game_system.$on_before_save();
-  const record={time:Date.now(),header:packSave(this.$make_save_header()),body:packSave(this.$make_save_contents())};
+  const record=makeSaveRecord();
   localStorage.setItem(saveKey(i),JSON.stringify(record));this.last_savefile_index=i;return true;
  }catch(e){console.warn('Save failed',e.message);return false;}
 };
@@ -51,11 +62,11 @@ dm.$load_game=function(i){
  try{
   const record=readSlot(i);if(!record)return false;
   const contents=unpackSave(record.body);this.$extract_save_contents(contents);
-  this.$reload_map_if_updated();this.last_savefile_index=i;return true;
+  this.$reload_map_if_updated();if(i!==AUTOSAVE_SLOT)this.last_savefile_index=i;return true;
  }catch(e){console.warn('Load failed',e.message);return false;}
 };
 dm.$load_header=function(i){try{const r=readSlot(i);return r?unpackSave(r.header):Opal.nil;}catch{return Opal.nil;}};
-dm['$save_file_exists?']=function(){try{for(let i=0;i<this.$savefile_max();i++)if(localStorage.getItem(saveKey(i)))return true;}catch{}return false;};
+dm['$save_file_exists?']=function(){if(autosaveRecord)return true;try{for(let i=0;i<this.$savefile_max();i++)if(localStorage.getItem(saveKey(i)))return true;}catch{}return false;};
 dm.$savefile_time_stamp=function(i){try{return Opal.Time.$at((readSlot(i)?.time||0)/1000);}catch{return Opal.Time.$at(0);}};
 dm.$delete_save_file=i=>localStorage.removeItem(saveKey(i));
 // The game's ATB and equipment scripts use a Marshal round trip for deep copies.
