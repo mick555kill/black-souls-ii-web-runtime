@@ -404,9 +404,26 @@
       if(!dirty && !flash)return false;
       this.repaint=false;this.lastFade=this.fadeAlpha;
       this.presentedWidth=this.canvas.width;this.presentedHeight=this.canvas.height;
-      const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
       sprites.sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
+      // Flash effects use the original canvas path; all other scene drawing
+      // can run on WebGL without changing RGSS game logic or bitmap APIs.
+      if(!flash && !this.gpuUnavailable && root.VX.GPUScene && typeof document!=='undefined'){
+        try{
+          this.gpu??=new root.VX.GPUScene();
+          this.gpu.begin(this.canvas.width,this.canvas.height,sprites,this.bitmaps);
+          this.paintScene(this.gpu,sprites,flashing,strength);
+          this.gpu.finish(this.ctx);this.rendererMode='webgl';
+          this.presentationVersion++;return true;
+        }catch(error){
+          console.warn('GPU compositor fallback:',error);this.gpu?.dispose();this.gpu=null;this.gpuUnavailable=true;
+        }
+      }
+      this.rendererMode='canvas2d';this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+      this.paintScene(this.ctx,sprites,flashing,strength);
+      this.presentationVersion++;return true;
+    }
+    paintScene(c,sprites,flashing,strength){
       for(const s of sprites){
         if(s.overlay){
           const v=s.overlay;c.save();c.globalAlpha=strength(v.flash);c.fillStyle=v.flash.color;c.fillRect(...v.rect);c.restore();continue;
@@ -425,8 +442,8 @@
         if(s.blend_type===1)c.globalCompositeOperation='lighter';
         if(s.plane){
           if(b.ready && s.zoom_x>0 && s.zoom_y>0){
-            if(b.patternCanvas!==b.canvas || b.patternVersion!==b.version){
-              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;b.patternVersion=b.version;
+            if(b.patternContext!==c || b.patternCanvas!==b.canvas || b.patternVersion!==b.version){
+              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;b.patternVersion=b.version;b.patternContext=c;
             }
             const x=viewport?.ox||0,y=viewport?.oy||0;
             c.scale(s.zoom_x,s.zoom_y);c.translate(-s.ox,-s.oy);
@@ -453,7 +470,6 @@
         c.restore();
       }
       if(this.fadeAlpha){c.fillStyle=`rgba(0,0,0,${Math.max(0,Math.min(1,this.fadeAlpha))})`;c.fillRect(0,0,this.canvas.width,this.canvas.height);}
-      this.presentationVersion++;return true;
     }
     drawWindow(c,s,b){
       const w=s.windowWidth,h=s.windowHeight,open=s.windowOpenness/255;
@@ -467,7 +483,7 @@
           // The 64px windowskin texture tiles at its native size. Keep the
           // individual slices for subpixel placement at interpolation edges.
           const v=s.lastViewport;
-          if(Number.isInteger(s.x+(v?v.rect[0]-v.ox:0)) && Number.isInteger(s.y+(v?v.rect[1]-v.oy:0))){
+          if(!c.isGPU && Number.isInteger(s.x+(v?v.rect[0]-v.ox:0)) && Number.isInteger(s.y+(v?v.rect[1]-v.oy:0))){
             if(skin.windowPatternVersion!==skin.version || !skin.windowPattern){
               const tile=skin.windowTile??(skin.windowTile=this.canvasOf(64,64));
               const ctx=tile.getContext('2d');ctx.clearRect(0,0,64,64);
@@ -576,7 +592,7 @@
         this.stopChannel(slot);
       }
       for(const tiles of this.tilemaps.values())tiles.chunks?.dispose();
-      this.tilemaps.clear();this.viewports.clear();this.bitmaps.clear();this.sprites.clear();this.fadeAlpha=0;
+      this.tilemaps.clear();this.viewports.clear();this.bitmaps.clear();this.sprites.clear();this.fadeAlpha=0;this.gpu?.dispose();
       this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
       this.repaint=true;this.presentationVersion++;
       if(this.visibleSprites)this.visibleSprites.length=0;
