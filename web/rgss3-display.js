@@ -346,17 +346,19 @@
     inView(s,b,v){
       const r=v?.rect;
       const tx=v?r[0]-v.ox:0,ty=v?r[1]-v.oy:0;
-      const left=r?Math.max(0,r[0]):0,top=r?Math.max(0,r[1]):0;
-      const right=r?Math.min(this.canvas.width,r[0]+r[2]):this.canvas.width;
-      const bottom=r?Math.min(this.canvas.height,r[1]+r[3]):this.canvas.height;
+      const left=r?Math.max(0,Math.min(r[0],r[0]+r[2])):0,top=r?Math.max(0,Math.min(r[1],r[1]+r[3])):0;
+      const right=r?Math.min(this.canvas.width,Math.max(r[0],r[0]+r[2])):this.canvas.width;
+      const bottom=r?Math.min(this.canvas.height,Math.max(r[1],r[1]+r[3])):this.canvas.height;
       if(right<=left || bottom<=top)return false;
-      if(s.window)return s.windowOpenness>0 && s.windowWidth>0 && s.windowHeight>0 &&
-        s.x+tx<right && s.x+tx+s.windowWidth>left && s.y+ty<bottom && s.y+ty+s.windowHeight>top;
+      const originX=Number(s.x)+tx,originY=Number(s.y)+ty;
+      if(s.window)return s.windowOpenness>0 && s.windowWidth!==0 && s.windowHeight!==0 &&
+        Math.min(originX,originX+s.windowWidth)<right && Math.max(originX,originX+s.windowWidth)>left &&
+        Math.min(originY,originY+s.windowHeight)<bottom && Math.max(originY,originY+s.windowHeight)>top;
       if(s.plane)return b.ready && s.zoom_x>0 && s.zoom_y>0;
       const width=s.crop?s.crop[2]:b.width,height=s.crop?s.crop[3]:b.height;
       if(!s.zoom_x || !s.zoom_y || width<=0 || height<=0)return false;
       if(s.angle || s.mirror)return true;
-      const x=tx+s.x-s.ox*s.zoom_x,y=ty+s.y-s.oy*s.zoom_y;
+      const x=originX-s.ox*s.zoom_x,y=originY-s.oy*s.zoom_y;
       const x2=x+width*s.zoom_x,y2=y+height*s.zoom_y;
       return Math.min(x,x2)<right && Math.max(x,x2)>left && Math.min(y,y2)<bottom && Math.max(y,y2)>top;
     }
@@ -381,9 +383,11 @@
         const b=this.bitmaps.get(s.bitmap),v=this.viewports.get(s.viewport);
         const shown=!!(s.visible && b && (s.window || s.opacity>0) && (s.viewport===-1 || v?.visible) &&
           !(flashing(v)&&!v.flash.color) && !(flashing(s)&&!s.flash.color) && this.inView(s,b,v));
-        if(shown!==s.wasDrawn)dirty=true;
-        s.wasDrawn=shown;
-        if(!shown){s.lastBitmap=s.lastSkin=s.lastViewport=undefined;continue;}
+        if(shown!==s.wasDrawn){
+          dirty=true;s.wasDrawn=shown;
+          if(!shown)s.lastBitmap=s.lastSkin=s.lastViewport=undefined;
+        }
+        if(!shown)continue;
         const skin=s.window?this.bitmaps.get(s.skin):undefined,arrow=s.window&&s.pause?pause:-1;
         if(s.lastVersion!==s.version || s.lastBitmap!==b || s.lastPixels!==b.version ||
           s.lastViewport!==v || s.lastViewVersion!==v?.version || s.lastSkin!==skin ||
