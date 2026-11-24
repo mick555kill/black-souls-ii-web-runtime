@@ -54,5 +54,5 @@ rgssHost.$measure=(text,font,size,bold,italic)=>{
 };
 function fontStyle(font,size,bold,italic){
  const fonts=(Array.isArray(font)?font:[font]).map(f=>JSON.stringify(String(f))).join(',');
- return (italic?'italic ':'')+(bold?'bold ':'')+size+'px '+fonts+', sans-serif';
+ return (italic?'italic ':'')+(bold?'bold ':'')+size+'px "Game Thai", '+fonts+', "Noto Sans Thai", Thonburi, sans-serif';
 }

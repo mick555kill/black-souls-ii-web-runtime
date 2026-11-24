@@ -1,5 +1,5 @@
 let nextGraphicsId=1;
-const heldKeys=new Set();let lastKeys=new Set(),sampledKeys=new Set(),heldFrames=new Map();
+const heldKeys=new Set(),pointerPresses=new Set();let lastKeys=new Set(),sampledKeys=new Set(),heldFrames=new Map();
 // VX Ace event command 111 stores button IDs, while game scripts use symbols.
 const eventButtons={2:'DOWN',4:'LEFT',6:'RIGHT',8:'UP',11:'A',12:'B',13:'C',14:'X',15:'Y',16:'Z',17:'L',18:'R'};
 function inputName(key){
@@ -14,6 +14,8 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
   inputUpdate(){
     lastKeys=sampledKeys;
     sampledKeys=new Set(heldKeys);
+    for(const key of pointerPresses)sampledKeys.add(key);
+    pointerPresses.clear();
     for(const key of sampledKeys)heldFrames.set(key,(heldFrames.get(key)||0)+1);
     for(const key of [...heldFrames.keys()])if(!sampledKeys.has(key))heldFrames.delete(key);
   },

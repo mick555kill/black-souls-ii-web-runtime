@@ -1,71 +1,70 @@
-// Subtitles are display-only. Keep event text, wait codes and choice indices in RGSS.
-globalThis.thaiCaptions=(()=>{
- const toggle=document.getElementById('thai-toggle'),caption=document.getElementById('thai-caption');
- const button=document.getElementById('thai-model'),info=document.getElementById('thai-info');
- let translator,current=null,options=[],revision=0;
+// Look up display strings only. Event scripts, asset paths and save data keep their original values.
+globalThis.thaiLocale=(()=>{
+ const normalize=text=>text.replace(/\s+/gu,' ').trim();
+ const reviewed=new Map([...thaiLines].map(([s,t])=>[normalize(s),t]));
+ const pack=globalThis.thaiPack;
  const cache=new Map();
- const clean=text=>text.replace(/\\(?:[CI]\[\d+\]|[.!|^<>{}])/gi,'').replace(/\s+/g,' ').trim();
- function resolve(text){
-  return text.replace(/\\([NPGV])(?:\[(\d+)\])?/gi,(raw,key,index)=>{
-   const g=Opal.gvars,i=Number(index);
-   switch(key.toUpperCase()){
-    case 'N':return g.game_actors['$[]'](i).$name();
-    case 'P':return g.game_party.$members()[i-1]?.$name()||'';
-    case 'V':return g.game_variables['$[]'](i);
-    case 'G':return g.data_system.$currency_unit();
-   }
-  });
+ function key(text){
+  let h=2166136261;
+  for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619);
+  return (h>>>0).toString(36);
  }
- async function translate(text){
-  if(thaiLines.has(text))return resolve(thaiLines.get(text));
-  const plain=clean(text);
-  if(!translator||!/[A-Za-z]{2,}/.test(plain))return null;
-  if(cache.has(plain))return resolve(cache.get(plain));
-  // Preserve dynamic values verbatim, including player-chosen names.
-  const parts=plain.split(/(\\(?:[NPV]\[\d+\]|G\b))/gi);
-  const result=[];
-  for(const part of parts){
-   if(!part.trim()||part.startsWith('\\'))result.push(part);
-   else result.push(await translator.translate(part));
+ function exact(source){return reviewed.get(source)??pack.lines[key(source)];}
+ const suffixes=new Set(pack.battleSuffixes);
+ const locale={enabled:true,revision:0};
+ // Script messages may be assembled as a name followed by a skill or state result.
+ function assembled(value,s){
+  if(value.includes('\n'))return value.split('\n').map(text).join('\n');
+  const file=/^(File)\s+(\d+)$/.exec(s);
+  if(file)return 'ช่องบันทึก '+file[2];
+  const shift=s.match(/^(.+?)(\+\d+)$/);
+  if(shift){const base=exact(shift[1].trim());if(base!==undefined)return base+shift[2];}
+  for(const match of s.matchAll(/\s+/g)){
+   const tail=s.slice(match.index+match[0].length);
+   if(!suffixes.has(key(tail)))continue;
+   const name=s.slice(0,match.index);
+   return displayName(name)+' '+(exact(tail)??tail);
   }
-  const translated=result.join('');
-  if(cache.size>=512)cache.delete(cache.keys().next().value);
-  cache.set(plain,translated);return resolve(translated);
+  return value;
  }
- async function refresh(){
-  const token=++revision;
-  caption.hidden=true;caption.textContent='';
-  if(!toggle.checked)return;
-  const list=[...(current?[current]:[]),...options];
-  const lines=await Promise.all(list.map(s=>translate(s).catch(()=>null)));
-  if(token!==revision||!lines.some(Boolean))return;
-  const body=[];
-  if(current&&lines[0])body.push(lines[0]);
-  options.forEach((s,i)=>body.push((i+1)+'. '+(lines[i+Number(!!current)]||resolve(clean(s)))));
-  caption.textContent=body.join('\n');caption.scrollTop=0;caption.hidden=false;
+ function text(value){
+  if(!locale.enabled||typeof value!=='string'||!value.length||!/[a-z\u3040-\u9fff]/i.test(value))return value;
+  if(cache.has(value))return cache.get(value);
+  const s=normalize(value),result=exact(s);
+  if(result===undefined)return assembled(value,s);
+  if(cache.size>=4096)cache.clear();
+  cache.set(value,result);return result;
  }
- function settings(){
-  button.hidden=!toggle.checked||!globalThis.Translator||!!translator;
-  info.textContent=toggle.checked?(translator?'เปิดแปลอัตโนมัติแล้ว':'มีคำแปลบทนำในเครื่อง'):'';
-  refresh();
+ function displayName(name){
+  if(!locale.enabled)return name;
+  const actors=Opal.gvars.game_actors?.data;
+  if(Array.isArray(actors)&&actors.some(a=>a?.name===name&&a.name!==a.$actor().name))return name;
+  return exact(normalize(String(name)))??name;
  }
- try{toggle.checked=localStorage.getItem('bs2.thai')==='1';}catch{}
- toggle.onchange=()=>{
-  try{localStorage.setItem('bs2.thai',toggle.checked?'1':'0');}catch{}
-  settings();
+ locale.text=text;locale.displayName=displayName;
+ locale.setEnabled=enabled=>{
+  if(locale.enabled===enabled)return;
+  locale.enabled=enabled;locale.revision++;cache.clear();
+  if(typeof document!=='undefined')document.dispatchEvent(new Event('game-language-change'));
  };
- button.onclick=async()=>{
-  button.disabled=true;info.textContent='กำลังเตรียมตัวแปลในเครื่อง…';
-  try{
-   translator=await Translator.create({sourceLanguage:'en',targetLanguage:'th'});
-   settings();
-  }catch{info.textContent='ตัวแปลอัตโนมัติยังใช้ไม่ได้ เปิดอ่านซับบทนำได้';}
-  finally{button.disabled=false;}
- };
- settings();
- return {
-  message(text,position){current=text;options=[];caption.classList.toggle('low',position===0);refresh();},
-  choices(labels){options=labels;refresh();},
-  clear(){current=null;options=[];refresh();}
- };
+ // Translate the format and its display arguments before Ruby inserts them. Restrict this to game vocabulary.
+ const templates=new Set([...reviewed.keys()].filter(s=>s.includes('%s')));
+ const sprintf=Opal.Kernel.$$prototype.$sprintf;
+ Opal.defn(Opal.Kernel,'$sprintf',function(format,...args){
+  if(locale.enabled&&templates.has(format)){
+   format=exact(format);
+   args=args.map(a=>typeof a==='string'?displayName(a):a);
+  }
+  return sprintf.call(this,format,...args);
+ });
+ const toggle=globalThis.document?.getElementById('thai-toggle');
+ if(toggle){
+  try{locale.enabled=localStorage.getItem('bs2.thai')!=='0';}catch{}
+  toggle.checked=locale.enabled;
+  toggle.onchange=()=>{
+   try{localStorage.setItem('bs2.thai',toggle.checked?'1':'0');}catch{}
+   locale.setEnabled(toggle.checked);
+  };
+ }
+ return locale;
 })();

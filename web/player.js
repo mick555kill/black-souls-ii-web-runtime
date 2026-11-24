@@ -49,11 +49,21 @@ el('folder').onchange=async e=>{
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
-  project=await new VX.Project(source).initialize();await Promise.all([prepareDatabase(project),autosave.prepare()]);
+  project=await new VX.Project(source).initialize();await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
   display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();requestAnimationFrame(tick);
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
+document.addEventListener('game-language-change',()=>{
+ if(!active||!scene)return;
+ const msg=scene.message_window;
+ if(msg?.name_windows){msg.$dispose_name_window();msg.$create_name_window();}
+ for(const win of Object.values(scene)){
+  if(win===msg||!win?.$$class||!Opal.is_a(win,Opal.Window_Base)||!win.visible)continue;
+  if(typeof win.$refresh==='function'&&!win.$refresh.$$stub&&win.$$class!==Opal.Window_ScrollText)win.$refresh();
+ }
+ if(cheatMenu.open)populateCheatItems();
+});
 const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',z:'ok',Escape:'cancel',x:'cancel',Shift:'shift'};
 const pointers=new Map(), keyboard=new Map();
 const padButtons=[...document.querySelectorAll('.pad [data-key]')];
@@ -68,6 +78,7 @@ function syncKey(key){
 }
 function setPointer(id,key){
  const old=pointers.get(id);
+ if(key&&old!==key)pointerPresses.add(key);
  if(key===undefined)pointers.delete(id);
  else pointers.set(id,key);
  syncKey(old);
@@ -83,7 +94,7 @@ onkeyup=e=>{
  keyboard.delete(e.code);syncKey(key);
 };
 function releaseControls(){
- pointers.clear();keyboard.clear();heldKeys.clear();
+ pointers.clear();keyboard.clear();heldKeys.clear();pointerPresses.clear();
  for(const button of padButtons)button.classList.remove('pressed');
 }
 onblur=releaseControls;
@@ -130,7 +141,15 @@ el('screen').onpointerdown=e=>{
  const bounds=e.currentTarget.getBoundingClientRect();
  const [u,v]=crt.sourcePoint((e.clientX-bounds.left)/bounds.width,(e.clientY-bounds.top)/bounds.height);
  const px=u*display.canvas.width,py=v*display.canvas.height;
- const windows=[scene.message_window?.choice_window,...Object.values(scene)];
+ const msg=scene.message_window,number=msg?.number_window;
+ if(number?.active&&number['$open?']()){
+  const col=Math.floor((px-number.x-number.padding)/20),row=py-number.y-number.padding;
+  if(col>=0&&col<number.digits_max&&row>=0&&row<number.$line_height()){
+   number.index=col;number.$update_cursor();
+  }
+  return;
+ }
+ const windows=[msg?.choice_window,msg?.item_window,...Object.values(scene)];
  for(const w of windows){
   if(!w?.active||typeof w.$item_rect!=='function'||!w.visible||!w['$open?']())continue;
   const vp=display.viewports.get(display.sprites.get(w.id)?.viewport);
