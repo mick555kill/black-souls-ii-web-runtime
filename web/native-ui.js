@@ -9,12 +9,81 @@ nameKeyboard.$item_rect=function(index){
  const column=index%10,row=Math.floor(index/10),height=this.$line_height();
  return Opal.Rect.$new(column*32+(column>=5?16:0),row*height,32,height);
 };
+const localText=text=>globalThis.thaiLocale?.text(text)??text;
+const languageVersion=()=>globalThis.thaiLocale?.revision??0;
+const thaiScript=/[\u0e01-\u0e5b]/;
+const wordBreaks=typeof Intl.Segmenter==='function'?new Intl.Segmenter('th',{granularity:'word'}):null;
+const clusters=typeof Intl.Segmenter==='function'?new Intl.Segmenter('th',{granularity:'grapheme'}):null;
+function graphemes(text){
+ return clusters?Array.from(clusters.segment(text),part=>part.segment):(text.match(/\P{M}\p{M}*|\p{M}+/gu)||[]);
+}
+// A Thai syllable's vowels and tone marks must be shaped together, including during the typewriter effect.
+let literalTextDepth=0;
+function literal(fn){literalTextDepth++;try{return fn();}finally{literalTextDepth--;}}
+const bitmapText=rgssHost.$bitmapText,measureText=rgssHost.$measure;
+rgssHost.$bitmapText=function(id,x,y,width,height,text,...style){
+ return bitmapText(id,x,y,width,height,literalTextDepth?text:localText(text),...style);
+};
+rgssHost.$measure=function(text,...style){
+ return measureText(literalTextDepth?text:localText(text),...style);
+};
+const actorName=Opal.Window_Base.$$prototype.$draw_actor_name;
+Opal.Window_Base.$$prototype.$draw_actor_name=function(actor,...args){
+ if(actor.$name()!==actor.$actor().name)return literal(()=>actorName.call(this,actor,...args));
+ return actorName.call(this,actor,...args);
+};
+const nameBitmap=Opal.Cache.$name_bitmap;
+if(nameBitmap)Opal.Cache.$name_bitmap=function(name){
+ const shown=globalThis.thaiLocale?.displayName(name)??name;
+ return literal(()=>nameBitmap.call(this,shown));
+};
 function textTokens(text){
- text=String(text).replace(/\\\\/g,'\u0000').replace(/\\N\[(\d+)\]/gi,(_,i)=>G.game_actors['$[]'](+i).$name())
-   .replace(/\\P\[(\d+)\]/gi,(_,i)=>G.game_party.$members()[+i-1]?.$name()||'')
+ const displayName=name=>globalThis.thaiLocale?.displayName(name)??name;
+ text=String(text).replace(/\\\\/g,'\u0000').replace(/\\N\[(\d+)\]/gi,(_,i)=>displayName(G.game_actors['$[]'](+i).$name()))
+   .replace(/\\P\[(\d+)\]/gi,(_,i)=>displayName(G.game_party.$members()[+i-1]?.$name()||''))
    .replace(/\\V\[(\d+)\]/gi,(_,i)=>G.game_variables['$[]'](+i)).replace(/\\G\b/gi,()=>G.data_system.$currency_unit());
- return text.match(/\\[a-z]+(?:\[.*?\])?|\\[.!|^<>{}]/gi)===null?Array.from(text.replaceAll('\u0000','\\')):
-   Array.from(text.matchAll(/\\[a-z]+(?:\[[^\]]*\])?|\\[.!|^<>{}]|[\s\S]/gi),m=>m[0]==='\u0000'?'\\':m[0]);
+ const wrap=thaiScript.test(text);
+ const tokens=[];
+ for(const part of text.split(/(\\[a-z]+(?:\[[^\]]*\])?|\\[.!|^<>{}$]|\n|\u0000)/gi)){
+  if(!part)continue;
+  if(part==='\u0000'){tokens.push('\\');continue;}
+  if(part==='\n'||part.startsWith('\\')){tokens.push(part);continue;}
+  if(wrap&&wordBreaks)for(const word of wordBreaks.segment(part))tokens.push(word.segment);
+  else tokens.push(...(wrap?graphemes(part):Array.from(part)));
+ }
+ return tokens;
+}
+function layoutText(w,text,left){
+ const tokens=textTokens(text);
+ if(!thaiScript.test(text))return tokens;
+ const maxWidth=Math.max(1,w.$contents_width()-left),out=[],font=w.$contents().$font();
+ const originalSize=font.$size(),widths=new Map();
+ let width=0;
+ function addWord(word,amount){
+  if(width>0&&width+amount>maxWidth){out.push('\n');width=0;}
+  if(width===0&&!word.trim())return;
+  out.push(word);width+=amount;
+ }
+ try{
+  for(const token of tokens){
+   if(token==='\n'){out.push(token);width=0;continue;}
+   if(token.length>1&&token.startsWith('\\')){
+    if(/^\\I\[/i.test(token))addWord(token,24);
+    else{
+     out.push(token);
+     if(token==='\\{')w.$make_font_bigger();else if(token==='\\}')w.$make_font_smaller();
+    }
+    continue;
+   }
+   const key=font.$size()+' '+token;
+   if(!widths.has(key))widths.set(key,literal(()=>w.$text_size(token).$width()));
+   const amount=widths.get(key);
+   if(amount>maxWidth){
+    for(const cluster of graphemes(token))addWord(cluster,literal(()=>w.$text_size(cluster).$width()));
+   }else addWord(token,amount);
+  }
+ }finally{font['$size='](originalSize);}
+ return out;
 }
 function glyph(win,token,pos){
  if(token==='\n'){pos.x=pos.left;pos.y+=win.$line_height();return;}
@@ -23,44 +92,88 @@ function glyph(win,token,pos){
   if(key==='C')win.$change_color(win.$text_color(val));
   else if(key==='I'){win.$draw_icon(val,pos.x,pos.y);pos.x+=24;}
   else if(key==='{')win.$make_font_bigger();else if(key==='}')win.$make_font_smaller();
+  else if(key==='$'&&win.gold_window)openWallet(win);
   return;
  }
- const width=win.$text_size(token).$width();
- win.$contents().$draw_text(pos.x,pos.y,width*2+2,win.$line_height(),token);
- pos.x+=width;
+ literal(()=>{
+  const width=win.$text_size(token).$width();
+  win.$contents().$draw_text(pos.x,pos.y,width*2+2,win.$line_height(),token);
+  pos.x+=width;
+ });
 }
 Opal.Window_Base.$$prototype.$draw_text_ex=function(x,y,text){
  this.$reset_font_settings();const pos={x,y,left:x};
- for(const token of textTokens(text))glyph(this,token,pos);
+ const shown=localText(String(text));let tokens=layoutText(this,shown,x);
+ if(thaiScript.test(shown)&&this.$$class===Opal.Window_Help){
+  const font=this.$contents().$font(),rows=Math.max(1,Math.floor(this.$contents_height()/this.$line_height()));
+  while(tokens.filter(t=>t==='\n').length>=rows&&font.$size()>14){
+   font['$size='](font.$size()-1);tokens=layoutText(this,shown,x);
+  }
+ }
+ for(const token of tokens)glyph(this,token,pos);
  return pos.x-x;
 };
 Opal.Window_Base.$$prototype.$delete_special_characters=function(text){
  return String(text).replace(/\x1b(?:[a-z]+(?:\[[^\]]*\])?|.)?/gi,'');
 };
 function messageWindow(){return Opal.SceneManager.$scene().message_window;}
-function endMessage(w){globalThis.thaiCaptions?.clear();w['$pause='](false);w.$close();G.game_message.$clear();G.game_message['$visible='](false);}
+function openWallet(w){
+ const wallet=w.gold_window;
+ // The browser controls occupy the top-right corner of the game on a tablet.
+ wallet['$x='](Math.floor((Opal.Graphics.$width()-wallet.$width())/2));
+ wallet.$refresh();wallet.$open();
+}
+function endMessage(w){
+ // The same confirmation must not reopen the NPC event as control returns to the map.
+ for(const key of ['ok','cancel'])if(sampledKeys.has(key))lastKeys.add(key);
+ w.gold_window.$close();w['$pause='](false);w.$close();
+ G.game_message.$clear();G.game_message['$visible='](false);
+}
+// Some number prompts do not supply a range. The original plugin clears both limits after confirmation.
+Opal.class_variable_set(Opal.Window_NumberInput,'@@min',Opal.nil);
+Opal.class_variable_set(Opal.Window_NumberInput,'@@max',Opal.nil);
+Opal.Window_NumberInput.$$prototype.$process_digit_change=function(){
+ if(!this.active)return;
+ const up=hostMethods.inputRepeat('UP'),down=hostMethods.inputRepeat('DOWN');
+ if(!up&&!down)return;
+ // RGSS uses integer division here. Keep all other decimal places and write an integer to the event variable.
+ const place=10**(this.digits_max-this.index-1),old=Math.floor(this.number/place)%10;
+ const digit=(old+Number(up)-Number(down)+10)%10;
+ this.number+=(digit-old)*place;Opal.Sound.$play_cursor();this.$refresh();
+};
 globalThis.playerUI={
- message(text,p,withChoices,w=messageWindow()){
-  globalThis.thaiCaptions?.message(text,p[3]);
+ message(text,p,withInput,w=messageWindow()){
   const m=G.game_message;
   m['$face_name='](p[0]);m['$face_index='](p[1]);m['$background='](p[2]);m['$position='](p[3]);m['$visible='](true);
   m.$add(text);w.$update_background();w.$update_placement();w.$open();
-  w.$new_page(text.split('\n',1)[0],Opal.hash());
-  const pos={left:w.$new_line_x(),x:w.$new_line_x(),y:0},tokens=textTokens(text);
-  let index=0,delay=0,waiting=false,automatic=false;
+  let pos,tokens,index,delay,waiting,nextPage,automatic,version;
+  function page(){w['$pause='](false);w.$new_page('',Opal.hash());pos={left:w.$new_line_x(),x:w.$new_line_x(),y:0};}
+  function restart(){
+   page();tokens=layoutText(w,localText(text),pos.left);
+   index=0;delay=0;waiting=false;nextPage=false;automatic=false;version=languageVersion();
+  }
+  restart();
   return ()=>{
+   if(version!==languageVersion())restart();
    if(!w['$open?']())return false;
    const confirm=hostMethods.inputTrigger('C')||hostMethods.inputTrigger('B');
    if(delay>0){delay--;return false;}
-   if(waiting){if(!confirm)return false;waiting=false;w['$pause='](false);}
+   if(waiting){
+    if(!confirm)return false;
+    waiting=false;w['$pause='](false);
+    if(nextPage){page();nextPage=false;}
+   }
    if(index===tokens.length){
-    if(withChoices)return true;
+    if(withInput)return true;
     if(!automatic&&!confirm){w['$pause='](true);return false;}
     endMessage(w);return true;
    }
    const count=hostMethods.inputPress('C')?tokens.length:1;
    for(let i=0;i<count&&index<tokens.length;i++){
     const token=tokens[index++];
+    if(token==='\n'&&index<tokens.length&&pos.y+w.$line_height()*2>w.$contents_height()){
+     nextPage=true;waiting=true;w['$pause='](true);break;
+    }
     if(token==='\\.'||token==='\\|'){delay=token==='\\.'?15:60;break;}
     if(token==='\\!'){waiting=true;w['$pause='](true);break;}
     if(token==='\\^'){automatic=true;continue;}
@@ -69,28 +182,74 @@ globalThis.playerUI={
    return false;
   };
  },
- choice(options,done,cancel,interpreter){
-  const w=messageWindow(),m=G.game_message;let finished=false;
-  const branches=[],labels=[],enabled=[];
-  for(const [i,raw] of options.entries()){
-   const visible=raw.match(/\s*if\(([^)]+)\)/i),enable=raw.match(/\s*en\(([^)]+)\)/i);
-   if(visible&&!Opal.truthy(interpreter.$choice_eval(visible[1])))continue;
-   branches.push(i);labels.push(raw.replace(visible?.[0]||'','').replace(enable?.[0]||'',''));
-   enabled.push(!enable||Opal.truthy(interpreter.$choice_eval(enable[1])));
-  }
+ inputWindow(field,showGold){
+  const w=messageWindow(),input=w[field];G.game_message['$visible='](true);
+  if(showGold)openWallet(w);
+  input.$start();input.$deactivate();let armed=false;
+  return ()=>{
+   if(!armed){
+    if(!input['$open?']()||hostMethods.inputPress('C')||hostMethods.inputPress('B'))return false;
+    input.$activate();armed=true;return false;
+   }
+   if(input.active)return false;
+   endMessage(w);return true;
+  };
+ },
+ choice(interpreter){
+  const w=messageWindow(),m=G.game_message,commands=interpreter.list,indent=interpreter.indent;
+  const labels=[],branches=[],enabled=[];
+  let pos=interpreter.index,offset=0,cancel=0,finished=false,started=false;
+  // ChoiceEX joins adjacent Show Choices groups and numbers their branches in blocks of five.
+  do{
+   const [options,cancelType]=commands[pos].$parameters();
+   for(const [i,raw] of options.entries()){
+    const visible=raw.match(/\s*if\(([^)]+)\)/i),enable=raw.match(/\s*en\(([^)]+)\)/i);
+    if(visible&&!Opal.truthy(interpreter.$choice_eval(visible[1])))continue;
+    branches.push(offset+i);labels.push(raw.replace(visible?.[0]||'','').replace(enable?.[0]||'',''));
+    enabled.push(!enable||Opal.truthy(interpreter.$choice_eval(enable[1])));
+   }
+   if(cancelType===5||(cancelType>0&&branches.includes(offset+cancelType-1)))cancel=offset+cancelType;
+   while(++pos<commands.length){
+    const command=commands[pos];
+    if(command.$indent()!==indent)continue;
+    if(command.$code()===404)break;
+    if(command.$code()===402){
+     const i=branches.indexOf(offset+command.$parameters()[0]);
+     if(i>=0)interpreter.$get_help_texts(i,pos+1);
+    }
+   }
+   pos++;offset+=5;
+  }while(commands[pos]?.$code()===102&&commands[pos].$indent()===indent);
+  const done=i=>interpreter.branch['$[]='](indent,i);
   if(!labels.length){done(-1);endMessage(w);return ()=>true;}
-  globalThis.thaiCaptions?.choices(labels);
-  m.choices=labels;m.choice_enables=enabled;m.choice_cancel_type=cancel;
-  branches.push(cancel-1);enabled.push(cancel>0);
+  m.choices=labels.map(localText);m.choice_enables=enabled;m.choice_cancel_type=cancel;m.visible=true;
+  const cancelIndex=branches.indexOf(cancel-1);
+  enabled.push(cancel>0&&(cancelIndex<0||enabled[cancelIndex]));branches.push(cancel-1);
   m.choice_proc=i=>{done(branches[i]);finished=true;};
-  w.choice_window.$start();
-  if(w.choice_window.index<0)w.choice_window.$select(0);
-  return ()=>{if(!finished)return false;endMessage(w);return true;};
+  let version=languageVersion();
+  return ()=>{
+   const choice=w.choice_window;
+   if(!started){
+    if(!choice['$close?']()||hostMethods.inputPress('C')||hostMethods.inputPress('B'))return false;
+    choice.$start();if(choice.index<0)choice.$select(0);started=true;
+   }
+   if(version!==languageVersion()){
+    m.choices=labels.map(localText);choice.$update_placement();choice.$refresh();version=languageVersion();
+   }
+   if(!finished)return false;endMessage(w);return true;
+  };
  },
  name(name,max,onName,actorId){
   Opal.SceneManager.$call(Opal.Scene_Name);Opal.SceneManager.$scene().$prepare(actorId,max);
   return ()=>Opal.SceneManager.$scene().$$class!==Opal.Scene_Name;
  }
+};
+
+const scrollHeight=Opal.Window_ScrollText.$$prototype.$update_all_text_height;
+Opal.Window_ScrollText.$$prototype.$update_all_text_height=function(){
+ if(!thaiScript.test(this.text))return scrollHeight.call(this);
+ const rows=1+layoutText(this,this.text,4).filter(t=>t==='\n').length;
+ this.all_text_height=1+rows*this.$line_height();this.$reset_font_settings();
 };
 
 const originalLineHeight=Opal.Window_Base.$$prototype.$calc_line_height;

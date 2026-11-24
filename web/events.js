@@ -5,7 +5,7 @@ let handlingSceneCommand=false;
 const proto=Opal.Game_Interpreter.$$prototype;
 proto.$create_fiber=function(){
  this.fiber=this.list===Opal.nil?Opal.nil:true;
- this.pending=null;this.commandWait=null;this.childEvent=null;
+ this.pending=null;this.commandWait=null;this.childEvent=null;this.followupInput=false;this.numberShowsGold=false;
 };
 // Parallel map events also run while the player walks. Keep their remaining wait in the save graph.
 function commandStillWaiting(wait){
@@ -28,6 +28,12 @@ proto.$update=function(){
  for(let budget=0;budget<128 && this.index<this.list.length;budget++){
   const command=this.list[this.index], code=command.$code(), p=command.$parameters();
   this.params=p;this.indent=command.$indent();
+  if(![103,355,655].includes(code))this.numberShowsGold=false;
+  if(code>=101&&code<=105){
+   const message=Opal.gvars.game_message;
+   if(!this.followupInput && (message.visible===true || message.scroll_mode===true))return;
+   this.followupInput=false;
+  }
   switch(code){
    case 301:case 302:case 340:case 351:case 352:case 353:case 354:{
     handlingSceneCommand=true;
@@ -39,9 +45,23 @@ proto.$update=function(){
    case 101:{
     const lines=[];
     while(this.list[this.index+1]?.$code()===401)lines.push(this.list[++this.index].$parameters()[0]);
-    this.pending=playerUI.message(lines.join('\n'),p,this.list[this.index+1]?.$code()===102);break;
+    const next=this.list[this.index+1]?.$code();
+    this.numberShowsGold=lines.some(line=>line.includes('\\$'));
+    this.followupInput=next===102||next===103||next===104;
+    this.pending=playerUI.message(lines.join('\n'),p,this.followupInput);break;
    }
-   case 102:this.pending=playerUI.choice(p[0],i=>this.branch['$[]='](this.indent,i),p[1],this);break;
+   case 102:this.pending=playerUI.choice(this);break;
+   case 103:case 104:{
+    if(code===103)this.$setup_num_input(p);else this.$setup_item_choice(p);
+    this.pending=playerUI.inputWindow(code===103?'number_window':'item_window',code===103&&this.numberShowsGold);this.numberShowsGold=false;break;
+   }
+   case 105:{
+    const m=Opal.gvars.game_message,lines=[];
+    while(this.list[this.index+1]?.$code()===405)lines.push(this.list[++this.index].$parameters()[0]);
+    m.scroll_mode=true;m.scroll_speed=p[0];m.scroll_no_fast=p[1];
+    for(const line of lines)m.$add(globalThis.thaiLocale?.text(line)??line);
+    this.pending=()=>!m.scroll_mode;break;
+   }
    case 303:{
     const actor=Opal.gvars.game_actors['$[]'](p[0]);
     this.pending=playerUI.name(actor.$name(),p[1],s=>actor['$name='](s),p[0]);break;

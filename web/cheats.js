@@ -7,7 +7,7 @@ function populateCheatItems(){
  const options=[];
  for(const item of Opal.gvars[category.value]){
   if(item && item!==Opal.nil && String(item.name).trim()){
-   options.push(new Option(item.id+' · '+item.name,item.id));
+   options.push(new Option(item.id+' · '+thaiLocale.text(item.name),item.id));
   }
  }
  itemList.replaceChildren(...options);
@@ -28,7 +28,7 @@ el('spawn-form').onsubmit=event=>{
  const party=Opal.gvars.game_party, before=party.$item_number(item);
  party.$gain_item(item,count);
  const total=party.$item_number(item);
- feedback.textContent=item.name+' +'+(total-before)+' · มีทั้งหมด '+total;
+ feedback.textContent=thaiLocale.text(item.name)+' +'+(total-before)+' · มีทั้งหมด '+total;
 };
 el('money-form').onsubmit=event=>{
  event.preventDefault();
