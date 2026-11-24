@@ -11,8 +11,8 @@
     return Number.isFinite(n)&&Math.abs(n)<=Number.MAX_SAFE_INTEGER?n:null;
   }
   Opal.defn(Opal.Game_Actor,'$olextend_data_1',function(){
-    const n=literal(Opal.MLV_CHANGE.P_RATE);
-    return n===null?rate1.call(this):n/100;
+    const n=literal(Opal.MLV_CHANGE?.P_RATE);
+    return n===null?rate1.call(this):Opal.rb_divide(n.$to_f(),100);
   });
   Opal.defn(Opal.Game_Actor,'$olextend_data_2',function(){
     let data=100;
@@ -21,7 +21,7 @@
       if(n===null)return rate2.call(this);
       data=Opal.rb_plus(data,Opal.rb_minus(n,100));
     }
-    return data/100;
+    return Opal.rb_divide(data.$to_f(),100);
   });
   Opal.defn(Opal.RPG.Class,'$exp_for_level',function(level){
     let extra=0;
