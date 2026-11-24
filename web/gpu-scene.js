@@ -52,10 +52,14 @@ class GPUScene {
   rect(x,y,w,h){const a=this.point(x,y),b=this.point(x+w,y+h);this.path=[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];}
   clip(){if(!this.path)return;const a=this.state.clip,b=this.path;this.state.clip=[Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.min(a[2],b[2]),Math.min(a[3],b[3])];}
   createPattern(image,repeat){if(repeat!=='repeat')throw Error('Unsupported pattern');return {image};}
+  forget(image){
+    const entry=this.textures.get(image);if(!entry)return;
+    this.gl.deleteTexture(entry.texture);this.textures.delete(image);this.bytes-=entry.bytes;
+  }
   trim(){
     while(this.textures.size>128||this.bytes>this.limit){
       const key=this.textures.keys().next().value;if(key===undefined)break;
-      const entry=this.textures.get(key);this.gl.deleteTexture(entry.texture);this.textures.delete(key);this.bytes-=entry.bytes;
+      this.forget(key);
     }
   }
   texture(image){
