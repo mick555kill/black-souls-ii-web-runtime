@@ -2,9 +2,11 @@ let nextGraphicsId=1;
 const heldKeys=new Set(),pointerPresses=new Set();let lastKeys=new Set(),sampledKeys=new Set(),heldFrames=new Map();
 // VX Ace event command 111 stores button IDs, while game scripts use symbols.
 const eventButtons={2:'DOWN',4:'LEFT',6:'RIGHT',8:'UP',11:'A',12:'B',13:'C',14:'X',15:'Y',16:'Z',17:'L',18:'R'};
+const inputNames={DOWN:'down',LEFT:'left',RIGHT:'right',UP:'up',C:'ok',B:'cancel',A:'shift',SHIFT:'shift',X:'a',Y:'s',Z:'d'};
+const directions=[['down',2],['left',4],['right',6],['up',8]];
 function inputName(key){
   const name=eventButtons[key] || String(key).toUpperCase();
-  return ({DOWN:'down',LEFT:'left',RIGHT:'right',UP:'up',C:'ok',B:'cancel',A:'shift',SHIFT:'shift',X:'a',Y:'s',Z:'d'})[name]||name.toLowerCase();
+  return inputNames[name]||name.toLowerCase();
 }
 function sendRGSS(op,args){ if(globalThis.display)display.handle({op,args}); }
 const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
@@ -12,12 +14,13 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
   resize:(w,h)=>sendRGSS('resize',[w,h]),
   fade:(alpha,duration)=>sendRGSS('fade',[alpha,duration]),
   inputUpdate(){
-    lastKeys=sampledKeys;
-    sampledKeys=new Set(heldKeys);
+    const spare=lastKeys;lastKeys=sampledKeys;sampledKeys=spare;
+    sampledKeys.clear();
+    for(const key of heldKeys)sampledKeys.add(key);
     for(const key of pointerPresses)sampledKeys.add(key);
     pointerPresses.clear();
     for(const key of sampledKeys)heldFrames.set(key,(heldFrames.get(key)||0)+1);
-    for(const key of [...heldFrames.keys()])if(!sampledKeys.has(key))heldFrames.delete(key);
+    for(const key of heldFrames.keys())if(!sampledKeys.has(key))heldFrames.delete(key);
   },
   inputPress:key=>sampledKeys.has(inputName(key)),
   inputTrigger:key=>sampledKeys.has(inputName(key))&&!lastKeys.has(inputName(key)),
@@ -25,7 +28,7 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
     const n=heldFrames.get(inputName(key))||0;
     return n===1||(n>=24&&n%6===0);
   },
-  inputDir4(){for(const [name,d] of [['down',2],['left',4],['right',6],['up',8]])if(sampledKeys.has(name))return d;return 0;},
+  inputDir4(){for(const [name,d] of directions)if(sampledKeys.has(name))return d;return 0;},
   audio:(...args)=>sendRGSS('audio',args),
   bitmapCreate(w,h){const id=nextGraphicsId++;sendRGSS('bitmap-create',[id,w,h]);return id;},
   bitmapLoad(name){const id=nextGraphicsId++;sendRGSS('bitmap-load',[id,name]);return id;},

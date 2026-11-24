@@ -4,12 +4,13 @@ const crt=(()=>{
   const output=document.getElementById('crt-screen');
   const toggle=document.getElementById('crt-toggle');
   let gl,textureSize,outputSize,maskStrength,ready=false;
-  let glLimit;
+  let glLimit,lastVersion=null;
   let inputWidth=0,inputHeight=0,cssWidth=0,cssHeight=0;
   const bend=0.052;
   const measure=()=>{
     const rect=screen.getBoundingClientRect();
     cssWidth=rect.width;cssHeight=rect.height;
+    if(ready && toggle.checked)draw();
   };
   if(typeof ResizeObserver==='function')new ResizeObserver(measure).observe(screen);
   window.addEventListener('resize',measure);
@@ -62,7 +63,7 @@ const crt=(()=>{
     if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
     gl.useProgram(program);textureSize=gl.getUniformLocation(program,'size');
     outputSize=gl.getUniformLocation(program,'raster');maskStrength=gl.getUniformLocation(program,'maskAmount');
-    inputWidth=inputHeight=0;
+    inputWidth=inputHeight=0;lastVersion=null;
     gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
     const pos=gl.getAttribLocation(program,'p');
@@ -80,7 +81,10 @@ const crt=(()=>{
     const physicalW=Math.max(1,Math.round(cssWidth*dpr)),physicalH=Math.max(1,Math.round(cssHeight*dpr));
     const scale=Math.min(1,Math.sqrt(2800000/(physicalW*physicalH)),glLimit/physicalW,glLimit/physicalH);
     const rw=Math.max(1,Math.round(physicalW*scale)),rh=Math.max(1,Math.round(physicalH*scale));
-    if(output.width!==rw||output.height!==rh){output.width=rw;output.height=rh;}
+    const version=globalThis.display?.presentationVersion;
+    const resized=output.width!==rw||output.height!==rh;
+    if(!resized && inputWidth===w && inputHeight===h && version!==undefined && version===lastVersion)return;
+    if(resized){output.width=rw;output.height=rh;}
     if(inputWidth!==w||inputHeight!==h){
       inputWidth=w;inputHeight=h;
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
@@ -89,7 +93,7 @@ const crt=(()=>{
     gl.viewport(0,0,rw,rh);gl.uniform2f(outputSize,rw,rh);
     gl.uniform1f(maskStrength,Math.max(0,Math.min(1,(rw/w-1.4)/1.4))*Math.max(0,(scale-0.8)*5));
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gl.RGBA,gl.UNSIGNED_BYTE,screen);
-    gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.drawArrays(gl.TRIANGLES,0,3);lastVersion=version;
   }
   function apply(){
     if(toggle.checked&&!ready){
@@ -98,7 +102,7 @@ const crt=(()=>{
         toggle.parentElement.append(' (WebGL ใช้งานไม่ได้)');
       }
     }
-    output.hidden=!toggle.checked;if(toggle.checked)measure();draw();
+    output.hidden=!toggle.checked;lastVersion=null;if(toggle.checked)measure();
   }
   output.addEventListener('webglcontextlost',event=>{
     event.preventDefault();ready=false;output.hidden=true;

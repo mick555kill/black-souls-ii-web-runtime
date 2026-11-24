@@ -3,6 +3,139 @@
  */
 (function(root){
   'use strict';
+  // World-aligned blocks let the camera scroll without rasterizing every tile.
+  // Cells with animated water or waterfalls are repainted at their own phase.
+  class TileChunks {
+    constructor(display, tiles, sources) {
+      this.display=display;
+      this.map=tiles.map;
+      this.flags=tiles.flags;
+      this.sources=sources;
+      this.versions=sources.map(b=>b?.version);
+      this.sheets=sources.map(b=>b?.ready?b.canvas:null);
+      this.images=new Map();
+      this.blocks=new Map();
+      this.span=8;
+      this.last=null;
+    }
+    matches(tiles, sources) {
+      return this.map===tiles.map && this.flags===tiles.flags &&
+        this.sources.length===sources.length && sources.every((b,i)=>b===this.sources[i] && b?.version===this.versions[i]);
+    }
+    image(tile, frame) {
+      const key=tile*3+root.VX.Autotile.phase(tile,frame);
+      if(!this.images.has(key)) {
+        if(this.images.size>=1024){
+          const oldest=this.images.keys().next().value,image=this.images.get(oldest);
+          if(image)image.width=0;
+          this.images.delete(oldest);
+        }
+        this.images.set(key,root.VX.Autotile.compose(tile,this.sheets,frame,(w,h)=>this.display.canvasOf(w,h)));
+      }
+      return this.images.get(key);
+    }
+    paint(block, x, y, frame, replace) {
+      const px=(x-block.x)*32,py=(y-block.y)*32;
+      if(replace) {
+        block.low.clearRect(px,py,32,32);
+        block.high?.clearRect(px,py,32,32);
+      }
+      let cycles=0;
+      for(let z=0;z<Math.min(3,this.map.depth);z++) {
+        const tile=this.map.at(x,y,z);
+        if(!tile)continue;
+        if(!replace && root.VX.Autotile.phase(tile,1)) {
+          const kind=Math.floor((tile-2048)/48);
+          cycles|=root.VX.Autotile.isWaterfall(kind)?2:1;
+        }
+        const image=this.image(tile,frame);
+        if(!image)continue;
+        let ctx=block.low;
+        if(this.flags?.at(tile)&16) {
+          if(!block.high)block.high=this.display.canvasOf(block.low.canvas.width,block.low.canvas.height).getContext('2d');
+          ctx=block.high;
+        }
+        ctx.drawImage(image,px,py);
+      }
+      const shadow=this.map.at(x,y,3)&15;
+      if(shadow) {
+        block.low.fillStyle='rgba(0,0,0,.5)';
+        for(let i=0;i<4;i++)if(shadow&(1<<i))block.low.fillRect(px+(i%2)*16,py+(i>>1)*16,16,16);
+      }
+      if(cycles)block.animated.push({x,y,cycles});
+    }
+    block(bx, by, frame) {
+      const key=by*Math.ceil(this.map.width/this.span)+bx;
+      let block=this.blocks.get(key);
+      if(block) {
+        this.blocks.delete(key);
+      }else{
+        const x=bx*this.span,y=by*this.span;
+        const w=Math.min(this.span,this.map.width-x),h=Math.min(this.span,this.map.height-y);
+        block={x,y,low:this.display.canvasOf(w*32,h*32).getContext('2d'),high:null,animated:[],frame};
+        for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)this.paint(block,i,j,frame,false);
+      }
+      this.blocks.set(key,block);
+      return block;
+    }
+    releaseBlock(block) {
+      block.low.canvas.width=0;
+      if(block.high)block.high.canvas.width=0;
+    }
+    dispose() {
+      for(const block of this.blocks.values())this.releaseBlock(block);
+      for(const image of this.images.values())if(image)image.width=0;
+      this.blocks.clear();this.images.clear();
+    }
+    updateAnimation(block, frame) {
+      if(block.frame===frame)return false;
+      const before=block.frame;
+      block.frame=frame;
+      if(!block.animated.length)return false;
+      const phase=[0,1,2,1];
+      const changed=(phase[before%4]!==phase[frame%4]?1:0)|(before%3!==frame%3?2:0);
+      let dirty=false;
+      for(const cell of block.animated)if(cell.cycles&changed){
+        this.paint(block,cell.x,cell.y,frame,true);
+        dirty=true;
+      }
+      return dirty;
+    }
+    draw(low, high, ox, oy, frame) {
+      const size=this.span*32;
+      const fromX=Math.max(0,Math.floor(ox/size)),fromY=Math.max(0,Math.floor(oy/size));
+      const endX=Math.min(Math.ceil(this.map.width/this.span),Math.ceil((ox+low.width)/size));
+      const endY=Math.min(Math.ceil(this.map.height/this.span),Math.ceil((oy+low.height)/size));
+      let dirty=!this.last || this.last.low!==low || this.last.high!==high || this.last.x!==ox || this.last.y!==oy;
+      if(!dirty && this.last.frame===frame)return;
+      const visible=[];
+      for(let by=fromY;by<endY;by++)for(let bx=fromX;bx<endX;bx++){
+        const block=this.block(bx,by,frame);
+        if(this.updateAnimation(block,frame))dirty=true;
+        visible.push(block);
+      }
+      const capacity=2*(Math.ceil(low.width/size)+1)*(Math.ceil(low.height/size)+1);
+      while(this.blocks.size>capacity) {
+        const key=this.blocks.keys().next().value,old=this.blocks.get(key);
+        this.blocks.delete(key);
+        this.releaseBlock(old);
+      }
+      if(!dirty){this.last.frame=frame;return;}
+      low.ctx.clearRect(0,0,low.width,low.height);
+      const upper=visible.some(block=>block.high);
+      if(!this.last || this.last.upper || upper || this.last.high!==high) {
+        high.ctx.clearRect(0,0,high.width,high.height);
+        high.version++;
+      }
+      for(const block of visible) {
+        const dx=block.x*32-ox,dy=block.y*32-oy;
+        low.ctx.drawImage(block.low.canvas,dx,dy);
+        if(block.high)high.ctx.drawImage(block.high.canvas,dx,dy);
+      }
+      low.version++;
+      this.last={x:ox,y:oy,frame,low,high,upper};
+    }
+  }
   class RGSS3Display{
     constructor(canvas,getProject=()=>null){
       this.canvas=canvas;
@@ -11,6 +144,7 @@
       this.bitmaps=new Map();this.sprites=new Map();this.tilemaps=new Map();this.viewports=new Map();this.channels=new Map();this.audioGeneration=new Map();
       this.volumePercent=100;this.fadeAlpha=0;this.enabled=false;
       this.maxBitmapPixels=4096*4096;
+      this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
     }
     canvasOf(w,h){
       const sizeW=Number(w),sizeH=Number(h);
@@ -21,7 +155,7 @@
     }
     makeBitmap(id,w,h){
       const canvas=this.canvasOf(w,h);
-      this.bitmaps.set(id,{canvas,ctx:canvas.getContext('2d'),width:w,height:h,ready:true,tail:null});
+      this.bitmaps.set(id,{canvas,ctx:canvas.getContext('2d'),width:w,height:h,ready:true,tail:null,version:0});
     }
     async loadBitmap(bitmap,path){
       const project=this.getProject();
@@ -112,7 +246,7 @@
       if(!b || (slot!==undefined&&!src))return;
       const resources=src&&src!==b?[b,src]:[b];
       const waits=resources.map(bitmap=>bitmap.tail).filter(Boolean);
-      const draw=()=>this.drawBitmap(op,args,b,src);
+      const draw=()=>{this.drawBitmap(op,args,b,src);b.version++;};
       if(!waits.length){draw();return;}
       // Retain the original surfaces across dispose and order later reads and writes.
       const tail=Promise.all(waits).then(draw).catch(e=>console.warn('Bitmap draw:',e));
@@ -131,7 +265,7 @@
         case 'resize':{
           // The project uses the fixed VX Ace 544x416 viewport.
           const [w,h]=args;
-          if(w>0&&h>0&&w<=2048&&h<=2048){this.canvas.width=w;this.canvas.height=h;}
+          if(w>0&&h>0&&w<=2048&&h<=2048){this.canvas.width=w;this.canvas.height=h;this.repaint=true;}
           return;
         }
         case 'fade':this.fadeAlpha=Number(args[0])||0;return;
@@ -142,13 +276,13 @@
           const bitmap=this.bitmaps.get(id);bitmap.ready=false;
           const tail=this.loadBitmap(bitmap,path).catch(e=>console.warn('Bitmap load:',e));
           bitmap.tail=tail;
-          tail.then(()=>{bitmap.ready=true;if(bitmap.tail===tail)bitmap.tail=null;});
+          tail.then(()=>{bitmap.ready=true;bitmap.version++;if(bitmap.tail===tail)bitmap.tail=null;});
           return;
         }
         case 'bitmap-dispose':this.bitmaps.delete(args[0]);return;
         case 'bitmap-snapshot':{
           const b=this.bitmaps.get(args[0]);
-          if(b){this.render();b.ctx.drawImage(this.canvas,0,0);}
+          if(b){this.render();b.ctx.drawImage(this.canvas,0,0);b.version++;}
           return;
         }
         case 'tile-table':{
@@ -157,33 +291,50 @@
           this.tilemaps.set(id,tilemap);return;
         }
         case 'tile-draw':this.drawTiles(...args);return;
-        case 'tile-dispose':this.tilemaps.delete(args[0]);return;
+        case 'tile-dispose':{
+          this.tilemaps.get(args[0])?.chunks?.dispose();this.tilemaps.delete(args[0]);return;
+        }
         case 'viewport-create':
-          this.viewports.set(args[0],{ox:0,oy:0,z:0,visible:true,rect:[0,0,this.canvas.width,this.canvas.height]});return;
+          this.viewports.set(args[0],{version:0,ox:0,oy:0,z:0,visible:true,rect:[0,0,this.canvas.width,this.canvas.height]});return;
         case 'viewport-rect':{
-          const viewport=this.viewports.get(args[0]);if(viewport)viewport.rect=args.slice(1);return;
+          const viewport=this.viewports.get(args[0]);if(viewport)this.setRect(viewport,'rect',args);return;
         }
         case 'viewport-set':{
           const [id,key,value]=args, viewport=this.viewports.get(id);
-          if(viewport && ['ox','oy','z','visible'].includes(key))viewport[key]=value;
+          if(viewport && viewport[key]!==value && ['ox','oy','z','visible'].includes(key)){viewport[key]=value;viewport.version++;}
           return;
         }
         case 'viewport-dispose':this.viewports.delete(args[0]);return;
-        case 'window-cursor':{const s=this.sprites.get(args[0]);if(s)s.cursor=args.slice(1);return;}
+        case 'window-cursor':{const s=this.sprites.get(args[0]);if(s)this.setRect(s,'cursor',args);return;}
         case 'sprite-crop':{
-          const sprite=this.sprites.get(args[0]);if(sprite)sprite.crop=args.slice(1);return;
+          const sprite=this.sprites.get(args[0]);if(sprite)this.setRect(sprite,'crop',args);return;
         }
-        case 'sprite-create':this.sprites.set(args[0],{x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,blend_type:0,plane:false,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
+        case 'sprite-create':this.sprites.set(args[0],{version:0,wasDrawn:false,x:0,y:0,z:0,ox:0,oy:0,visible:true,opacity:255,zoom_x:1,zoom_y:1,bitmap:-1,viewport:-1,crop:null,angle:0,blend_type:0,plane:false,mirror:false,window:false,windowWidth:0,windowHeight:0,windowOpenness:255,skin:-1,cursor:null,padding:12,padding_bottom:12,contents_opacity:255,back_opacity:192,pause:false});return;
         case 'sprite-set':{
           const [id,key,value]=args,s=this.sprites.get(id);
-          if(s&&Object.prototype.hasOwnProperty.call(s,String(key))){s[String(key)]=value;if(key==='bitmap')s.crop=null;}
+          if(s)this.setSprite(s,key,value);
           return;
         }
-        case 'sprite-dispose':this.sprites.delete(args[0]);return;
+        case 'sprite-dispose':{
+          if(this.sprites.get(args[0])?.wasDrawn)this.repaint=true;
+          this.sprites.delete(args[0]);return;
+        }
         case 'audio':this.audio(...args).catch(e=>console.warn('RGSS3 audio:',e.message));return;
         default:if(op.startsWith('bitmap-'))return this.queueBitmap(op,args);
           console.warn('Unknown RGSS3 display command:',op);
       }
+    }
+    setSprite(sprite,key,value){
+      if(!Object.prototype.hasOwnProperty.call(sprite,key))return;
+      if(sprite[key]===value && !(key==='bitmap' && sprite.crop))return;
+      sprite[key]=value;
+      if(key==='bitmap')sprite.crop=null;
+      sprite.version++;
+    }
+    setRect(target,key,args){
+      const rect=target[key];
+      if(rect && rect[0]===args[1] && rect[1]===args[2] && rect[2]===args[3] && rect[3]===args[4])return;
+      target[key]=args.slice(1);target.version++;
     }
     frame(){
       return new Promise(resolve=>{
@@ -192,36 +343,90 @@
         else setTimeout(tick,16);
       });
     }
+    inView(s,b,v){
+      const r=v?.rect;
+      const tx=v?r[0]-v.ox:0,ty=v?r[1]-v.oy:0;
+      const left=r?Math.max(0,Math.min(r[0],r[0]+r[2])):0,top=r?Math.max(0,Math.min(r[1],r[1]+r[3])):0;
+      const right=r?Math.min(this.canvas.width,Math.max(r[0],r[0]+r[2])):this.canvas.width;
+      const bottom=r?Math.min(this.canvas.height,Math.max(r[1],r[1]+r[3])):this.canvas.height;
+      if(right<=left || bottom<=top)return false;
+      const originX=Number(s.x)+tx,originY=Number(s.y)+ty;
+      if(s.window)return s.windowOpenness>0 && s.windowWidth!==0 && s.windowHeight!==0 &&
+        Math.min(originX,originX+s.windowWidth)<right && Math.max(originX,originX+s.windowWidth)>left &&
+        Math.min(originY,originY+s.windowHeight)<bottom && Math.max(originY,originY+s.windowHeight)>top;
+      if(s.plane)return b.ready && s.zoom_x>0 && s.zoom_y>0;
+      const width=s.crop?s.crop[2]:b.width,height=s.crop?s.crop[3]:b.height;
+      if(!s.zoom_x || !s.zoom_y || width<=0 || height<=0)return false;
+      if(s.angle || s.mirror)return true;
+      const x=originX-s.ox*s.zoom_x,y=originY-s.oy*s.zoom_y;
+      const x2=x+width*s.zoom_x,y2=y+height*s.zoom_y;
+      return Math.min(x,x2)<right && Math.max(x,x2)>left && Math.min(y,y2)<bottom && Math.max(y,y2)>top;
+    }
     render(){
       for(const tiles of this.tilemaps.values()){
-        if(tiles.loading?.some(bitmap=>bitmap.ready))this.drawTiles(...tiles.lastDraw);
+        if(!tiles.lastDraw?.[6])continue;
+        const cache=tiles.chunks;
+        if(!cache || cache.map!==tiles.map || cache.flags!==tiles.flags ||
+          tiles.ids.some((id,i)=>this.bitmaps.get(id)!==cache.sources[i] || cache.sources[i]?.version!==cache.versions[i])){
+          this.drawTiles(...tiles.lastDraw);
+        }
       }
+      const frame=this.frameNumber??0,pause=Math.floor(performance.now()/140)%4;
+      const flashing=t=>t?.flash && frame<t.flash.start+t.flash.duration;
+      const strength=f=>Math.min(1,1-(frame-f.start)/f.duration);
+      const sprites=this.visibleSprites??(this.visibleSprites=[]);
+      sprites.length=0;
+      let dirty=this.repaint || this.fadeAlpha!==this.lastFade || this.hadFlash ||
+        this.canvas.width!==this.presentedWidth || this.canvas.height!==this.presentedHeight;
+      let flash=false;
+      for(const s of this.sprites.values()){
+        const b=this.bitmaps.get(s.bitmap),v=this.viewports.get(s.viewport);
+        const shown=!!(s.visible && b && (s.window || s.opacity>0) && (s.viewport===-1 || v?.visible) &&
+          !(flashing(v)&&!v.flash.color) && !(flashing(s)&&!s.flash.color) && this.inView(s,b,v));
+        if(shown!==s.wasDrawn){
+          dirty=true;s.wasDrawn=shown;
+          if(!shown)s.lastBitmap=s.lastSkin=s.lastViewport=undefined;
+        }
+        if(!shown)continue;
+        const skin=s.window?this.bitmaps.get(s.skin):undefined,arrow=s.window&&s.pause?pause:-1;
+        if(s.lastVersion!==s.version || s.lastBitmap!==b || s.lastPixels!==b.version ||
+          s.lastViewport!==v || s.lastViewVersion!==v?.version || s.lastSkin!==skin ||
+          s.lastSkinVersion!==skin?.version || s.lastArrow!==arrow)dirty=true;
+        s.lastVersion=s.version;s.lastBitmap=b;s.lastPixels=b.version;
+        s.lastViewport=v;s.lastViewVersion=v?.version;s.lastSkin=skin;s.lastSkinVersion=skin?.version;s.lastArrow=arrow;
+        if(flashing(s))flash=true;
+        sprites.push(s);
+      }
+      for(const v of this.viewports.values())if(v.visible && flashing(v) && v.flash.color){
+        flash=true;sprites.push({overlay:v,z:v.z,top:true});
+      }
+      this.hadFlash=flash;
+      if(!dirty && !flash)return false;
+      this.repaint=false;this.lastFade=this.fadeAlpha;
+      this.presentedWidth=this.canvas.width;this.presentedHeight=this.canvas.height;
       const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
-      const flashing=t=>t?.flash && (this.frameNumber??0)<t.flash.start+t.flash.duration;
-      const strength=f=>Math.min(1,1-((this.frameNumber??0)-f.start)/f.duration);
-      const overlays=[...this.viewports.values()].filter(v=>v.visible&&flashing(v)&&v.flash.color).map(v=>({overlay:v,z:v.z,top:true}));
-      const sprites=[...this.sprites.values(),...overlays].sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
+      sprites.sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
       for(const s of sprites){
         if(s.overlay){
           const v=s.overlay;c.save();c.globalAlpha=strength(v.flash);c.fillStyle=v.flash.color;c.fillRect(...v.rect);c.restore();continue;
         }
-        const b=this.bitmaps.get(s.bitmap);
-        if(!b||!s.visible||(!s.window && Number(s.opacity)<=0))continue;
-        const viewport=this.viewports.get(s.viewport);
-        if(s.viewport!==-1 && !viewport?.visible || flashing(viewport)&&!viewport.flash.color || flashing(s)&&!s.flash.color)continue;
+        const b=s.lastBitmap,viewport=s.lastViewport;
         c.save();
         if(viewport){
           const [vx,vy,vw,vh]=viewport.rect;
-          c.beginPath();c.rect(vx,vy,vw,vh);c.clip();c.translate(vx-viewport.ox,vy-viewport.oy);
+          if(vx>0||vy>0||vx+vw<this.canvas.width||vy+vh<this.canvas.height){
+            c.beginPath();c.rect(vx,vy,vw,vh);c.clip();
+          }
+          if(vx!==viewport.ox||vy!==viewport.oy)c.translate(vx-viewport.ox,vy-viewport.oy);
         }
         if(s.window){this.drawWindow(c,s,b);c.restore();continue;}
         c.globalAlpha=Math.max(0,Math.min(1,Number(s.opacity)/255));
         if(s.blend_type===1)c.globalCompositeOperation='lighter';
         if(s.plane){
           if(b.ready && s.zoom_x>0 && s.zoom_y>0){
-            if(b.patternCanvas!==b.canvas){
-              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;
+            if(b.patternCanvas!==b.canvas || b.patternVersion!==b.version){
+              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;b.patternVersion=b.version;
             }
             const x=viewport?.ox||0,y=viewport?.oy||0;
             c.scale(s.zoom_x,s.zoom_y);c.translate(-s.ox,-s.oy);
@@ -248,6 +453,7 @@
         c.restore();
       }
       if(this.fadeAlpha){c.fillStyle=`rgba(0,0,0,${Math.max(0,Math.min(1,this.fadeAlpha))})`;c.fillRect(0,0,this.canvas.width,this.canvas.height);}
+      this.presentationVersion++;return true;
     }
     drawWindow(c,s,b){
       const w=s.windowWidth,h=s.windowHeight,open=s.windowOpenness/255;
@@ -258,9 +464,22 @@
         c.globalAlpha=s.opacity*s.back_opacity/65025;
         if(w>4&&h>4){
           c.drawImage(atlas,0,0,64,64,2,2,w-4,h-4);
-          for(let y=2;y<h-2;y+=64)for(let x=2;x<w-2;x+=64){
-            const rw=Math.min(64,w-2-x),rh=Math.min(64,h-2-y);
-            c.drawImage(atlas,0,64,rw,rh,x,y,rw,rh);
+          // The 64px windowskin texture tiles at its native size. Keep the
+          // individual slices for subpixel placement at interpolation edges.
+          const v=s.lastViewport;
+          if(Number.isInteger(s.x+(v?v.rect[0]-v.ox:0)) && Number.isInteger(s.y+(v?v.rect[1]-v.oy:0))){
+            if(skin.windowPatternVersion!==skin.version || !skin.windowPattern){
+              const tile=skin.windowTile??(skin.windowTile=this.canvasOf(64,64));
+              const ctx=tile.getContext('2d');ctx.clearRect(0,0,64,64);
+              ctx.drawImage(atlas,0,64,64,64,0,0,64,64);
+              skin.windowPattern=c.createPattern(tile,'repeat');skin.windowPatternVersion=skin.version;
+            }
+            c.save();c.translate(2,2);c.fillStyle=skin.windowPattern;c.fillRect(0,0,w-4,h-4);c.restore();
+          }else{
+            for(let y=2;y<h-2;y+=64)for(let x=2;x<w-2;x+=64){
+              const rw=Math.min(64,w-2-x),rh=Math.min(64,h-2-y);
+              c.drawImage(atlas,0,64,rw,rh,x,y,rw,rh);
+            }
           }
         }
         c.globalAlpha=s.opacity/255;
@@ -274,7 +493,7 @@
       }
       c.globalAlpha=s.contents_opacity/255;c.drawImage(b.canvas,x,y);c.restore();
       if(atlas&&s.pause){
-        const frame=Math.floor(performance.now()/140)%4;
+        const frame=s.lastArrow;
         c.globalAlpha=1;c.drawImage(atlas,96+16*(frame%2),64+16*(frame>>1),16,16,(w-16)/2,h-16,16,16);
       }
     }
@@ -287,36 +506,19 @@
       }
     }
     drawTiles(id,lowId,highId,ox,oy,frame,visible,sheetIds){
-      const tiles=this.tilemaps.get(id),low=this.bitmaps.get(lowId),high=this.bitmaps.get(highId);
-      if(!tiles?.map || !low || !high || !visible)return;
-      const sources=sheetIds.split(',').map(id=>this.bitmaps.get(Number(id)));
-      tiles.loading=sources.filter(b=>b && !b.ready);
-      tiles.lastDraw=tiles.loading.length?[id,lowId,highId,ox,oy,frame,visible,sheetIds]:null;
-      const sheets=sources.map(b=>b?.ready?b.canvas:null);
-      if(!tiles.sheets || sheets.some((sheet,i)=>sheet!==tiles.sheets[i])){
-        tiles.sheets=sheets;tiles.cache=new Map();
+      const tiles=this.tilemaps.get(id);
+      if(!tiles)return;
+      tiles.lastDraw=[id,lowId,highId,ox,oy,frame,visible,sheetIds];
+      const low=this.bitmaps.get(lowId),high=this.bitmaps.get(highId);
+      if(!visible || !tiles.map || !low || !high)return;
+      if(tiles.sheetIds!==sheetIds){
+        tiles.sheetIds=sheetIds;tiles.ids=sheetIds.split(',').map(Number);
       }
-      const cache=tiles.cache;
-      for(const target of [low,high])target.ctx.clearRect(0,0,target.width,target.height);
-      const {map,flags}=tiles;
-      for(let y=Math.max(0,Math.floor(oy/32));y<Math.min(map.height,Math.ceil((oy+low.height)/32));y++){
-        for(let x=Math.max(0,Math.floor(ox/32));x<Math.min(map.width,Math.ceil((ox+low.width)/32));x++){
-          const dx=x*32-ox,dy=y*32-oy;
-          for(let z=0;z<Math.min(3,map.depth);z++){
-            const tile=map.at(x,y,z);if(!tile)continue;
-            const key=tile*3+root.VX.Autotile.phase(tile,frame);
-            if(!cache.has(key)){
-              if(cache.size>=1024)cache.delete(cache.keys().next().value);
-              cache.set(key,root.VX.Autotile.compose(tile,sheets,frame,(w,h)=>this.canvasOf(w,h)));
-            }
-            const image=cache.get(key);
-            if(image)((flags?.at(tile)&16)?high:low).ctx.drawImage(image,dx,dy);
-          }
-          const shadow=map.at(x,y,3)&15;
-          if(shadow){low.ctx.fillStyle='rgba(0,0,0,.5)';
-            for(let i=0;i<4;i++)if(shadow&(1<<i))low.ctx.fillRect(dx+(i%2)*16,dy+(i>>1)*16,16,16);}
-        }
+      const sources=tiles.ids.map(sheet=>this.bitmaps.get(sheet));
+      if(!tiles.chunks?.matches(tiles,sources)){
+        tiles.chunks?.dispose();tiles.chunks=new TileChunks(this,tiles,sources);
       }
+      tiles.chunks.draw(low,high,ox,oy,frame);
     }
     setVolume(percent){
       this.volumePercent=Math.max(0,Math.min(100,percent));
@@ -373,8 +575,11 @@
         this.audioGeneration.set(slot,(this.audioGeneration.get(slot)||0)+1);
         this.stopChannel(slot);
       }
+      for(const tiles of this.tilemaps.values())tiles.chunks?.dispose();
       this.tilemaps.clear();this.viewports.clear();this.bitmaps.clear();this.sprites.clear();this.fadeAlpha=0;
       this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+      this.repaint=true;this.presentationVersion++;
+      if(this.visibleSprites)this.visibleSprites.length=0;
     }
   }
   root.VX=root.VX||{};root.VX.RGSS3Display=RGSS3Display;

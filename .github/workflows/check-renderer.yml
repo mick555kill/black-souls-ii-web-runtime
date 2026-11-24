@@ -1,0 +1,39 @@
+name: Check Canvas renderer
+on:
+  pull_request:
+    paths:
+      - 'web/rgss3-display.js'
+      - 'web/autotile.js'
+      - 'web/host.js'
+      - 'web/player.js'
+      - 'web/cheats.js'
+      - 'web/crt.js'
+      - 'playtest-render.cjs'
+      - '.github/workflows/check-renderer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renderer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare pixels and count draw calls in Chromium
+        env:
+          REFERENCE_REV: ${{ github.event.pull_request.base.sha || 'HEAD' }}
+        run: node playtest-render.cjs "$REFERENCE_REV"
+      - name: Install WebKit for touch-viewport checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bs2-webkit" --no-package-lock --no-audit --no-fund playwright@1.56.1
+          "$RUNNER_TEMP/bs2-webkit/node_modules/.bin/playwright" install --with-deps webkit
+      - name: Compare pixels and frame work in touch WebKit
+        env:
+          REFERENCE_REV: ${{ github.event.pull_request.base.sha || 'HEAD' }}
+          BROWSER_ENGINE: webkit
+          NODE_PATH: ${{ runner.temp }}/bs2-webkit/node_modules
+        run: node playtest-render.cjs "$REFERENCE_REV"

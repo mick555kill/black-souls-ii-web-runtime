@@ -1,6 +1,6 @@
 'use strict';
 const el=id=>document.getElementById(id);
-let project,scene,active=false,frameTime=0;
+let project,scene,active=false,frameTime=0,animationRequest=null;
 let autosaveNoticeTimer;
 autosave.notify=text=>{
  const notice=el('autosave-status');notice.textContent=text;notice.hidden=false;
@@ -16,15 +16,23 @@ async function loadMapData(id){
  const key='data/map'+String(id).padStart(3,'0')+'.rvdata2';
  if(!database.has(key))database.set(key,rubyValue(await project.loadMap(id)));
 }
+function scheduleTick(){
+ if(active && !document.hidden && !cheatMenu.open && animationRequest===null)
+  animationRequest=requestAnimationFrame(tick);
+}
+function pauseTick(){
+ if(animationRequest!==null)cancelAnimationFrame(animationRequest);
+ animationRequest=null;frameTime=0;
+}
 function tick(t){
- if(!active)return;
- if(cheatMenu.open){requestAnimationFrame(tick);return;}
+ animationRequest=null;
+ if(!active || document.hidden || cheatMenu.open)return;
  try{
   if(t-frameTime>=15){
    frameTime=t;const current=Opal.SceneManager.$scene();
    if(current===Opal.nil){active=false;el('status').textContent='จบการทำงาน';return;}
    if(current!==scene && scene?.browserBattleMessage){
-    scene.advanceBrowserBattleMessage();display.render();crt.draw();requestAnimationFrame(tick);return;
+    scene.advanceBrowserBattleMessage();display.render();crt.draw();scheduleTick();return;
    }
    if(current!==scene){
     if(scene){scene.$pre_terminate();scene.$terminate();}
@@ -36,7 +44,7 @@ function tick(t){
    crt.draw();
    autosave.update(scene,t);
   }
-  requestAnimationFrame(tick);
+  scheduleTick();
  }catch(e){errorMessage(e);}
 }
 el('folder').onchange=async e=>{
@@ -51,7 +59,7 @@ el('folder').onchange=async e=>{
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
   project=await new VX.Project(source).initialize();await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
-  display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();requestAnimationFrame(tick);
+  display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
 document.addEventListener('game-language-change',()=>{
@@ -98,9 +106,10 @@ function releaseControls(){
  for(const button of padButtons)button.classList.remove('pressed');
 }
 onblur=releaseControls;
-function leavePage(){releaseControls();if(active)autosave.update(scene,performance.now(),true);}
-document.addEventListener('visibilitychange',()=>{if(document.hidden)leavePage();});
+function leavePage(){pauseTick();releaseControls();if(active)autosave.update(scene,performance.now(),true);}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)leavePage();else scheduleTick();});
 window.addEventListener('pagehide',leavePage);
+window.addEventListener('pageshow',scheduleTick);
 // A native long-press menu or selection can interrupt a held game input on iPad.
 for(const eventName of ['contextmenu','selectstart']){
  document.addEventListener(eventName,event=>{
