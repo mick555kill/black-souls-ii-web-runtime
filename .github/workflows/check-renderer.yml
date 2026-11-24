@@ -1,0 +1,25 @@
+name: Check Canvas renderer
+on:
+  pull_request:
+    paths:
+      - 'web/rgss3-display.js'
+      - 'web/autotile.js'
+      - 'playtest-render.cjs'
+      - '.github/workflows/check-renderer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renderer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare pixels and count draw calls in Chromium
+        env:
+          REFERENCE_REV: ${{ github.event.pull_request.base.sha || 'HEAD' }}
+        run: node playtest-render.cjs "$REFERENCE_REV"

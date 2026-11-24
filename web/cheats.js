@@ -14,10 +14,10 @@ function populateCheatItems(){
 }
 cheatMenu.ontoggle=()=>{
  if(cheatMenu.open){
-  releaseControls();
+  pauseTick();releaseControls();
   populateCheatItems();
   feedback.textContent='';
- }else if(active)el('screen').focus();
+ }else if(active){el('screen').focus();scheduleTick();}
 };
 category.onchange=populateCheatItems;
 el('spawn-form').onsubmit=event=>{
