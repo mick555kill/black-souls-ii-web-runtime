@@ -25,7 +25,11 @@
     image(tile, frame) {
       const key=tile*3+root.VX.Autotile.phase(tile,frame);
       if(!this.images.has(key)) {
-        if(this.images.size>=1024)this.images.delete(this.images.keys().next().value);
+        if(this.images.size>=1024){
+          const oldest=this.images.keys().next().value,image=this.images.get(oldest);
+          if(image)image.width=0;
+          this.images.delete(oldest);
+        }
         this.images.set(key,root.VX.Autotile.compose(tile,this.sheets,frame,(w,h)=>this.display.canvasOf(w,h)));
       }
       return this.images.get(key);
@@ -74,6 +78,15 @@
       this.blocks.set(key,block);
       return block;
     }
+    releaseBlock(block) {
+      block.low.canvas.width=0;
+      if(block.high)block.high.canvas.width=0;
+    }
+    dispose() {
+      for(const block of this.blocks.values())this.releaseBlock(block);
+      for(const image of this.images.values())if(image)image.width=0;
+      this.blocks.clear();this.images.clear();
+    }
     updateAnimation(block, frame) {
       if(block.frame===frame)return false;
       const before=block.frame;
@@ -105,8 +118,7 @@
       while(this.blocks.size>capacity) {
         const key=this.blocks.keys().next().value,old=this.blocks.get(key);
         this.blocks.delete(key);
-        old.low.canvas.width=0;
-        if(old.high)old.high.canvas.width=0;
+        this.releaseBlock(old);
       }
       if(!dirty){this.last.frame=frame;return;}
       low.ctx.clearRect(0,0,low.width,low.height);
@@ -279,7 +291,9 @@
           this.tilemaps.set(id,tilemap);return;
         }
         case 'tile-draw':this.drawTiles(...args);return;
-        case 'tile-dispose':this.tilemaps.delete(args[0]);return;
+        case 'tile-dispose':{
+          this.tilemaps.get(args[0])?.chunks?.dispose();this.tilemaps.delete(args[0]);return;
+        }
         case 'viewport-create':
           this.viewports.set(args[0],{version:0,ox:0,oy:0,z:0,visible:true,rect:[0,0,this.canvas.width,this.canvas.height]});return;
         case 'viewport-rect':{
@@ -360,7 +374,8 @@
       const strength=f=>Math.min(1,1-(frame-f.start)/f.duration);
       const sprites=this.visibleSprites??(this.visibleSprites=[]);
       sprites.length=0;
-      let dirty=this.repaint || this.fadeAlpha!==this.lastFade || this.hadFlash;
+      let dirty=this.repaint || this.fadeAlpha!==this.lastFade || this.hadFlash ||
+        this.canvas.width!==this.presentedWidth || this.canvas.height!==this.presentedHeight;
       let flash=false;
       for(const s of this.sprites.values()){
         const b=this.bitmaps.get(s.bitmap),v=this.viewports.get(s.viewport);
@@ -368,7 +383,7 @@
           !(flashing(v)&&!v.flash.color) && !(flashing(s)&&!s.flash.color) && this.inView(s,b,v));
         if(shown!==s.wasDrawn)dirty=true;
         s.wasDrawn=shown;
-        if(!shown)continue;
+        if(!shown){s.lastBitmap=s.lastSkin=s.lastViewport=undefined;continue;}
         const skin=s.window?this.bitmaps.get(s.skin):undefined,arrow=s.window&&s.pause?pause:-1;
         if(s.lastVersion!==s.version || s.lastBitmap!==b || s.lastPixels!==b.version ||
           s.lastViewport!==v || s.lastViewVersion!==v?.version || s.lastSkin!==skin ||
@@ -384,6 +399,7 @@
       this.hadFlash=flash;
       if(!dirty && !flash)return false;
       this.repaint=false;this.lastFade=this.fadeAlpha;
+      this.presentedWidth=this.canvas.width;this.presentedHeight=this.canvas.height;
       const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
       sprites.sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
@@ -444,9 +460,22 @@
         c.globalAlpha=s.opacity*s.back_opacity/65025;
         if(w>4&&h>4){
           c.drawImage(atlas,0,0,64,64,2,2,w-4,h-4);
-          for(let y=2;y<h-2;y+=64)for(let x=2;x<w-2;x+=64){
-            const rw=Math.min(64,w-2-x),rh=Math.min(64,h-2-y);
-            c.drawImage(atlas,0,64,rw,rh,x,y,rw,rh);
+          // The 64px windowskin texture tiles at its native size. Keep the
+          // individual slices for subpixel placement at interpolation edges.
+          const v=s.lastViewport;
+          if(Number.isInteger(s.x+(v?v.rect[0]-v.ox:0)) && Number.isInteger(s.y+(v?v.rect[1]-v.oy:0))){
+            if(skin.windowPatternVersion!==skin.version || !skin.windowPattern){
+              const tile=skin.windowTile??(skin.windowTile=this.canvasOf(64,64));
+              const ctx=tile.getContext('2d');ctx.clearRect(0,0,64,64);
+              ctx.drawImage(atlas,0,64,64,64,0,0,64,64);
+              skin.windowPattern=c.createPattern(tile,'repeat');skin.windowPatternVersion=skin.version;
+            }
+            c.save();c.translate(2,2);c.fillStyle=skin.windowPattern;c.fillRect(0,0,w-4,h-4);c.restore();
+          }else{
+            for(let y=2;y<h-2;y+=64)for(let x=2;x<w-2;x+=64){
+              const rw=Math.min(64,w-2-x),rh=Math.min(64,h-2-y);
+              c.drawImage(atlas,0,64,rw,rh,x,y,rw,rh);
+            }
           }
         }
         c.globalAlpha=s.opacity/255;
@@ -482,7 +511,9 @@
         tiles.sheetIds=sheetIds;tiles.ids=sheetIds.split(',').map(Number);
       }
       const sources=tiles.ids.map(sheet=>this.bitmaps.get(sheet));
-      if(!tiles.chunks?.matches(tiles,sources))tiles.chunks=new TileChunks(this,tiles,sources);
+      if(!tiles.chunks?.matches(tiles,sources)){
+        tiles.chunks?.dispose();tiles.chunks=new TileChunks(this,tiles,sources);
+      }
       tiles.chunks.draw(low,high,ox,oy,frame);
     }
     setVolume(percent){
@@ -540,6 +571,7 @@
         this.audioGeneration.set(slot,(this.audioGeneration.get(slot)||0)+1);
         this.stopChannel(slot);
       }
+      for(const tiles of this.tilemaps.values())tiles.chunks?.dispose();
       this.tilemaps.clear();this.viewports.clear();this.bitmaps.clear();this.sprites.clear();this.fadeAlpha=0;
       this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
       this.repaint=true;this.presentationVersion++;

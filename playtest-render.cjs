@@ -76,6 +76,10 @@ async function checkRenderer(ReferenceDisplay) {
     command(d,'flash','Sprite',62,'rgba(240,80,20,.7)',3,20);
   }
   for(let f=20;f<=24;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('flash '+f);}
+  for(const color of ['rgba(255,127,30,.6)',null]){
+    for(const d of pair)command(d,'flash','Viewport',80,color,2,30);
+    for(let f=30;f<=32;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('viewport flash '+f);}
+  }
   for(const d of pair){command(d,'fade',.51);d.render();}compare('fade');
   for(const d of pair){
     command(d,'fade',0);set(d,62,'angle',0);set(d,62,'mirror',false);
@@ -89,6 +93,13 @@ async function checkRenderer(ReferenceDisplay) {
     command(d,'window-cursor',63,3,4,30,22);d.render();
   }
   compare('window/contents/cursor');
+  for(const d of pair){
+    command(d,'bitmap-clear-rect',6,0,64,64,64);command(d,'bitmap-fill',6,7,68,30,40,'rgba(30,200,97,.5)');
+    set(d,63,'opacity',141);set(d,63,'windowWidth',360);d.render();
+  }
+  compare('translucent repeated windowskin');
+  for(const d of pair){set(d,63,'x',9.5);d.render();}compare('fractional window');
+  for(const d of pair){set(d,63,'x',10);set(d,63,'back_opacity',70);d.render();}compare('skin opacity');
   for(const d of pair){set(d,63,'windowOpenness',85);d.render();}compare('window closing');
   for(const d of pair){set(d,63,'visible',false);d.render();}compare('hide');
   for(const d of pair){command(d,'sprite-dispose',62);d.render();}compare('dispose');
@@ -115,13 +126,23 @@ async function checkRenderer(ReferenceDisplay) {
       const original=proto.drawImage;originals.push([proto,original]);
       proto.drawImage=function(...args){count++;return original.apply(this,args);};
     }
+    const frames=160;
+    const walk=()=>{for(let i=1;i<=frames;i++)draw(d,i*4,(i>>2)*2,Math.floor(i/30)%12);};
+    let walkCalls,staticCalls;
     try{
-      const frames=160,start=performance.now();
-      for(let i=1;i<=frames;i++)draw(d,i*4,(i>>2)*2,Math.floor(i/30)%12);
-      const walk=count,elapsed=performance.now()-start;
-      count=0;for(let i=0;i<60;i++)d.render();
-      return {frames,walkDrawsPerFrame:walk/frames,staticDrawsPerFrame:count/60,walkMsPerFrame:elapsed/frames};
+      walk();walkCalls=count;
+      count=0;for(let i=0;i<60;i++)d.render();staticCalls=count;
     }finally{for(const [proto,original] of originals)proto.drawImage=original;}
+    // Time a warmed route with native drawImage restored, including the final raster flush.
+    const times=[];
+    for(let run=0;run<3;run++){
+      draw(d,0,0,0);d.ctx.getImageData(0,0,1,1);
+      const start=performance.now();
+      walk();d.ctx.getImageData(0,0,1,1);
+      times.push((performance.now()-start)/frames);
+    }
+    times.sort((a,b)=>a-b);d.reset();
+    return {frames,walkDrawsPerFrame:walkCalls/frames,staticDrawsPerFrame:staticCalls/60,walkMsPerFrame:times[1]};
   }
   const before=ReferenceDisplay?measure(ReferenceDisplay):null,after=measure(VX.RGSS3Display);
   assert(after.walkDrawsPerFrame<80,'walking draw count regressed');
@@ -129,6 +150,59 @@ async function checkRenderer(ReferenceDisplay) {
   return {pixelComparisons:comparisons,before,after};
 }
 
+// Exercise the actual page controls and frame loop with a minimal scene and
+// deterministic frame delivery. The user's game archive stays on their device.
+async function checkPlayer(context){
+  const tab=await context.newPage(),errors=[];
+  tab.on('pageerror',err=>errors.push(String(err)));
+  await tab.goto(require('node:url').pathToFileURL(path.join(__dirname,'index.html')).href);
+  await tab.evaluate(()=>{
+    const nativeRequest=window.requestAnimationFrame.bind(window),nativeCancel=window.cancelAnimationFrame.bind(window);
+    const queue=new Map();let serial=0,updates=0,hidden=false,saves=0;
+    window.requestAnimationFrame=cb=>{
+      if(cb!==tick)return nativeRequest(cb);
+      const id=--serial;queue.set(id,cb);return id;
+    };
+    window.cancelAnimationFrame=id=>id<0?queue.delete(id):nativeCancel(id);
+    Object.defineProperty(document,'hidden',{configurable:true,get:()=>hidden});
+    const minimal={$$class:Opal.Scene_Base,$update(){Opal.Graphics.$update();Opal.Input.$update();updates++;}};
+    Opal.SceneManager.$scene=()=>minimal;scene=minimal;Opal.gvars.data_items=[];
+    const autosaveUpdate=autosave.update;
+    autosave.update=function(...args){if(args[2])saves++;return autosaveUpdate.apply(this,args);};
+    active=true;el('picker').hidden=true;document.body.classList.add('playing');cheatMenu.hidden=false;scheduleTick();
+    window.checkLoop={
+      get count(){return queue.size;},
+      pulse(t){
+        if(queue.size!==1)throw Error('Expected one game callback, got '+queue.size);
+        const list=[...queue.values()];queue.clear();for(const cb of list)cb(t);
+        if(el('status').classList.contains('error'))throw Error(el('status').textContent);
+        return updates;
+      },
+      hide(value){hidden=value;document.dispatchEvent(new Event('visibilitychange'));},
+      get saves(){return saves;}
+    };
+  });
+  await tab.locator('.actions [data-key=ok]').tap();
+  const tap=await tab.evaluate(()=>{checkLoop.pulse(20);const first=hostMethods.inputTrigger('C');checkLoop.pulse(40);return first&&!hostMethods.inputPress('C');});
+  if(!tap)throw Error('Touch confirmation did not trigger and release');
+  await tab.locator('#cheats summary').tap();
+  await tab.waitForFunction(()=>checkLoop.count===0);
+  await tab.locator('#cheats summary').tap();
+  await tab.waitForFunction(()=>checkLoop.count===1);
+  const resumed=await tab.evaluate(()=>{
+    checkLoop.pulse(60);checkLoop.hide(true);
+    if(checkLoop.count!==0||checkLoop.saves!==1)return false;
+    window.dispatchEvent(new Event('pageshow'));
+    if(checkLoop.count!==0)return false;
+    checkLoop.hide(false);window.dispatchEvent(new Event('pageshow'));
+    return checkLoop.pulse(5000)===4 && checkLoop.count===1;
+  });
+  if(!resumed)throw Error('Menu or visibility pause/resume failed');
+  if(errors.length)throw Error(errors.join('\n'));
+  await tab.close();return {touchTap:true,menuResume:true,visibilityResume:true};
+}
+
+async function run(){
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bs2-canvas-'));
 try{
   const read=name=>fs.readFileSync(path.join(__dirname,name),'utf8');
@@ -143,13 +217,29 @@ try{
   });
   const page=path.join(dir,'test.html');
   fs.writeFileSync(page,'<meta charset="utf-8"><pre id="result">pending</pre><script>function finish(v){document.getElementById("result").textContent=JSON.stringify(v);}</script>'+source.join(''));
-  const chrome=process.env.CHROME_BIN||'google-chrome';
-  const html=execFileSync(chrome,['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
-    '--disable-background-networking','--allow-file-access-from-files','--user-data-dir='+path.join(dir,'profile'),'--dump-dom',
-    require('node:url').pathToFileURL(page).href],{encoding:'utf8',timeout:85000,stdio:['ignore','pipe','pipe']});
-  const raw=html.match(/<pre id="result">([\s\S]*?)<\/pre>/)?.[1];
-  if(!raw||raw==='pending')throw Error('Chromium did not complete the renderer checks');
-  const result=JSON.parse(raw.replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&amp;','&'));
+  const url=require('node:url').pathToFileURL(page).href;
+  let result;
+  if(process.env.BROWSER_ENGINE==='webkit'){
+    const {webkit}=require('playwright'),browser=await webkit.launch();
+    try{
+      const context=await browser.newContext({isMobile:true,hasTouch:true,viewport:{width:1024,height:768},deviceScaleFactor:2});
+      const tab=await context.newPage();
+      tab.on('pageerror',err=>console.error(err));
+      await tab.goto(url);await tab.waitForFunction(()=>document.getElementById('result')?.textContent!=='pending');
+      result=JSON.parse(await tab.locator('#result').textContent());
+      if(result.ok)result.player=await checkPlayer(context);
+    }finally{await browser.close();}
+  }else{
+    const chrome=process.env.CHROME_BIN||'google-chrome';
+    const html=execFileSync(chrome,['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
+      '--disable-background-networking','--allow-file-access-from-files','--user-data-dir='+path.join(dir,'profile'),'--dump-dom',
+      url],{encoding:'utf8',timeout:85000,stdio:['ignore','pipe','pipe']});
+    const raw=html.match(/<pre id="result">([\s\S]*?)<\/pre>/)?.[1];
+    if(!raw||raw==='pending')throw Error('Chromium did not complete the renderer checks');
+    result=JSON.parse(raw.replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&amp;','&'));
+  }
   if(!result.ok)throw Error(result.error);
   console.log(JSON.stringify(result,null,2));
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
+}
+run().catch(err=>{console.error(err);process.exitCode=1;});
