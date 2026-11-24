@@ -1,5 +1,6 @@
 // Preserve RGSS class identities, Hash keys, and shared references in each browser save.
 class PendingSaveAction extends Error {}
+function saveConstant(name){return name.split('::').reduce((scope,key)=>scope?.[key],Opal);}
 function packSave(root){
  const nodes=[],ids=new Map();
  function encode(value){
@@ -7,6 +8,12 @@ function packSave(root){
   if(value===Opal.nil)return null;
   if(['number','boolean','string'].includes(typeof value))return value;
   if(value instanceof String)return String(value);
+  // Game_BaseItem stores RPG::Weapon or RPG::Armor itself in an equipment slot.
+  if(value.$$is_a_module){
+   const name=String(value.$name());
+   if(saveConstant(name)===value)return {rgssConstant:name};
+   throw Error('Cannot save an unnamed RGSS class');
+  }
   if(typeof value==='function')throw new PendingSaveAction('Cannot save while a scripted action is pending');
   if(ids.has(value))return [ids.get(value)];
   const id=nodes.length,node={};ids.set(value,id);nodes.push(node);
@@ -24,9 +31,15 @@ function packSave(root){
  return {root:encode(root),nodes};
 }
 function unpackSave(graph){
- const objects=graph.nodes.map(n=>n.type==='array'?[]:n.type==='hash'?Opal.hash():
-  n.type.split('::').reduce((klass,key)=>klass[key],Opal).$allocate());
- const decode=v=>v?.jsNull?null:Array.isArray(v)?objects[v[0]]:v??Opal.nil;
+ const objects=graph.nodes.map(n=>n.type==='array'?[]:n.type==='hash'?Opal.hash():saveConstant(n.type).$allocate());
+ const decode=v=>{
+  if(v?.rgssConstant){
+   const constant=saveConstant(v.rgssConstant);
+   if(!constant?.$$is_a_module)throw Error('Unknown RGSS constant '+v.rgssConstant);
+   return constant;
+  }
+  return v?.jsNull?null:Array.isArray(v)?objects[v[0]]:v??Opal.nil;
+ };
  // Populate object and array keys before rebuilding hash buckets.
  for(const [i,n] of graph.nodes.entries()){
   if(n.type==='array')for(const v of n.data)objects[i].push(decode(v));

@@ -18,6 +18,7 @@ Opal.DataManager.$init();const assert=require('node:assert/strict'),dm=Opal.Data
 const mode=process.argv[3];
 if(mode==='auto-write'){
  await autosave.prepare();dm.$setup_new_game();await loadMapData(51);
+ g.game_party.$remove_actor(1);g.game_party.$add_actor(3);
  const player=g.game_player;
  player.$reserve_transfer(51,28,61,6);player.$perform_transfer();
  Opal.SceneManager.$goto(Opal.Scene_Map);const scene=Opal.SceneManager.$scene();scene.$start();scene.$post_start();scene.$update();
@@ -54,6 +55,8 @@ if(mode==='auto-write'){
  assert.deepEqual(loadScene.savefile_windows.slice(0,5).map(win=>win.file_index),[AUTOSAVE_SLOT,0,1,2,3]);
  loadScene.$on_savefile_ok();const mapScene=Opal.SceneManager.$scene();assert.ok(mapScene.$$class===Opal.Scene_Map);
  assert.deepEqual([g.game_map.map_id,g.game_player.x,g.game_player.y,g.game_variables['$[]'](8),g.game_switches['$[]'](107)],[51,28,61,10,true]);
+ const actor=g.game_party.$leader();assert.ok(actor.equips[0].class===Opal.RPG.Weapon && actor.equips[1].class===Opal.RPG.Armor);
+ assert.ok(actor.$weapons()[0]===g.data_weapons[actor.equips[0].item_id]);
  mapScene.$start();mapScene.$post_start();heldKeys.add('right');mapScene.$update();heldKeys.clear();
  assert.equal(g.game_player.x,29);
  Opal.SceneManager.$call(Opal.Scene_Save);const saveScene=Opal.SceneManager.$scene();saveScene.$start();
