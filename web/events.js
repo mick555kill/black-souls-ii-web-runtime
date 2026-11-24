@@ -44,21 +44,6 @@ proto.$update=function(){
     if(!start())this.pending=start;
     break;
    }
-   case 339:{
-    const targets=[];
-    Opal.send(this,'iterate_battler',p.slice(0,2),battler=>targets.push(battler));
-    let index=0;
-    this.pending=()=>{
-     if(Opal.BattleManager['$action_forced?']())return false;
-     while(index<targets.length){
-      const target=targets[index++];
-      if(target['$death_state?']())continue;
-      target.$force_action(p[2],p[3]);Opal.BattleManager.$force_action(target);return false;
-     }
-     return true;
-    };
-    break;
-   }
    case 205:{
     if(Opal.gvars.game_map.$need_refresh())Opal.gvars.game_map.$refresh();
     const ch=this.$get_character(p[0]);
@@ -80,6 +65,7 @@ proto.$update=function(){
     const from=Opal.Graphics.$brightness(),to=code===221?0:255;let elapsed=0;
     this.pending=()=>{Opal.Graphics['$brightness='](Math.round(from+(to-from)*(++elapsed/30)));return elapsed>=30;};break;
    }
+   // The game's command 339 queues a skill. Waiting here would stop the ATB clock it needs.
    default:this.$execute_command();
   }
   this.index++;
