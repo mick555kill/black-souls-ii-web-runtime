@@ -56,6 +56,36 @@ async function prepareMapTransfer(id){
  perfStats.mapAssetsMs=performance.now()-started;perfStats.mapAssetsCount=assets.filter(Boolean).length;
  return assets;
 }
+// ShortMove invokes perform_transfer synchronously, bypassing event command 201.
+const shortMoveProto=Opal.Scene_ShortMove?.$$prototype;
+if(shortMoveProto){
+ const originalPopOk=shortMoveProto.$pop_ok;
+ shortMoveProto.$pop_ok=function(){
+  if(this.browserTravelPending)return Opal.nil;
+  if(this.popup_window.$current_ext()!==1)return originalPopOk.call(this);
+  const point=this.command_window.$current_ext();
+  const id=point['$[]'](0)['$[]'](1)['$[]'](0);
+  this.browserTravelPending=true;
+  this.popup_window.$deactivate();
+  const notice=el('autosave-status');
+  notice.textContent='กำลังโหลดฉากปลายทาง…';notice.hidden=false;
+  prepareMapTransfer(id).then(assets=>{
+   if(!active||Opal.SceneManager.$scene()!==this)return;
+   // Keep decoded assets alive until the original transfer finishes.
+   this.browserTravelAssets=assets;
+   try{originalPopOk.call(this);}finally{this.browserTravelAssets=null;}
+  }).catch(error=>{
+   console.error('Fast travel:',error);
+   notice.textContent='โหลดฉากไม่สำเร็จ: '+String(error.message||error);
+   notice.hidden=false;
+   if(active&&Opal.SceneManager.$scene()===this)this.popup_window.$activate();
+  }).finally(()=>{
+   this.browserTravelPending=false;
+   if(Opal.SceneManager.$scene()!==this)notice.hidden=true;
+  });
+  return Opal.nil;
+ };
+}
 function scheduleTick(){
  if(active && !document.hidden && !cheatMenu.open && animationRequest===null)
   animationRequest=requestAnimationFrame(tick);
@@ -82,7 +112,7 @@ function tick(t){
    }
    // Direct transfers and restored saves can bypass the event preload.
    // Keep rendering while their map sheets finish, but don't advance map input.
-   const waitForMap=scene.$class===Opal.Scene_Map&&display.mapAssetsPending();
+   const waitForMap=scene.$$class===Opal.Scene_Map&&display.mapAssetsPending();
    if(profileEnabled){
     const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
