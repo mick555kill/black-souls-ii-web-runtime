@@ -9,6 +9,16 @@ const crt = (() => {
   let factor = 1, cssW = 0, cssH = 0, dpr = 1, activeCrt = false;
   let mode = 'native', unavailable = false, post = null;
   let fallbackCtx, fallbackVersion, fallbackW, fallbackH;
+  let notice = '', reportedW, reportedH, reportedNotice;
+
+  function reportOutput(w, h) {
+    if (factor === 1 && !activeCrt) { w = 0; h = 0; }
+    if (reportedW === w && reportedH === h && reportedNotice === notice) return;
+    reportedW = w; reportedH = h; reportedNotice = notice;
+    const size = w && h ? 'ภาพที่แสดง ' + w + ' × ' + h + ' พิกเซล' : '';
+    status.textContent = [size, notice].filter(Boolean).join(' · ');
+    status.hidden = !status.textContent;
+  }
 
   function openPost() {
     const {gl} = VX.screenContext(output, false);
@@ -39,6 +49,7 @@ const crt = (() => {
         post.width = w; post.height = h; post.version = version;
       }
       presenter.draw(texture, w, h, version);
+      reportOutput(presenter.target.w, presenter.target.h);
     } else if (mode === 'canvas') {
       if (fallbackVersion === version && fallbackW === w && fallbackH === h) return;
       const target = VX.ScreenFilter.raster(w, h, factor, false, cssW, cssH, dpr, 4096);
@@ -50,13 +61,17 @@ const crt = (() => {
       fallbackCtx.imageSmoothingQuality = 'high';
       fallbackCtx.drawImage(screen, 0, 0, target.w, target.h);
       fallbackVersion = version; fallbackW = w; fallbackH = h;
+      reportOutput(target.w, target.h);
+    } else {
+      const target = display.gpu?.presenter.target;
+      reportOutput(target?.w || 0, target?.h || 0);
     }
   }
   function apply() {
     const display = globalThis.display;
     if (!display?.enabled) return;
     const gpu = display.gpu;
-    let notice = '';
+    notice = '';
     dpr = window.devicePixelRatio || 1;
     activeCrt = false; mode = 'native';
     if (gpu) {
@@ -87,7 +102,6 @@ const crt = (() => {
     output.hidden = mode !== 'post';
     scaled.hidden = mode !== 'canvas';
     if (scaled.hidden && (scaled.width !== 1 || scaled.height !== 1)) scaled.width = scaled.height = 1;
-    status.hidden = !notice; status.textContent = notice;
     fallbackVersion = undefined;
     draw();
   }

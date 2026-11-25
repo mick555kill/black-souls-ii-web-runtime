@@ -273,7 +273,8 @@ async function checkFilterControls(context){
       let paints=0;const draw=c.drawImage;c.drawImage=function(...args){paints++;return draw.apply(this,args);};
       try{crt.draw();crt.draw();}finally{c.drawImage=draw;}
       if(paints)throw Error('Idle Canvas fallback kept painting');
-      return !document.getElementById('filter-status').hidden;
+      const status=document.getElementById('filter-status');
+      return !status.hidden && status.textContent.includes(scaled.width+' × '+scaled.height) && status.textContent.includes('Canvas 2D');
     });
     if(!fallback)throw Error('Canvas fallback mode missing');
     if(!await level.isVisible())await menu.tap();
