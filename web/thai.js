@@ -2,6 +2,18 @@
 globalThis.thaiLocale=(()=>{
  const normalize=text=>text.replace(/\s+/gu,' ').trim();
  const reviewed=new Map([...thaiLines].map(([s,t])=>[normalize(s),t]));
+ // Reviewed, concise fantasy terminology for fixed UI strings.
+ const fantasyTerms=new Map([
+  ['Load','คืนบันทึก'],['Load Game','คืนบันทึกเกม'],['Save','บันทึก'],['Save Game','บันทึกเกม'],
+  ['Travel','เดินทาง'],['Rest','พักแรม'],['Bonfire','กองเพลิง'],['Covenant','พันธสัญญา'],['Covenants','พันธสัญญา'],
+  ['Soul','ดวงวิญญาณ'],['Souls','ดวงวิญญาณ'],['Souls on hand:','ดวงวิญญาณที่ครอบครอง:'],
+  ['Souls on Hand','ดวงวิญญาณที่ครอบครอง'],['Give souls','ถวายดวงวิญญาณ'],
+  ['Level Up','ยกระดับพลัง'],['Level up','ยกระดับพลัง'],['Lost Soul','วิญญาณเร่ร่อน'],
+  ['Nameless Forest','พงไพรไร้นาม'],['Library Dream','ฝันแห่งหอสมุด'],
+  ['Library','หอสมุด'],['Bonfire Ascetic','นักพรตแห่งกองเพลิง'],
+  ['Save to which file?','จะจารึกบันทึกไว้ที่ใด?'],['Load which file?','จะคืนบันทึกใด?']
+ ]);
+ for(const [source,translation] of fantasyTerms)reviewed.set(normalize(source),translation);
  const pack=globalThis.thaiPack;
  const cache=new Map();
  function key(text){

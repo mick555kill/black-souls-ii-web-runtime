@@ -56,7 +56,7 @@ function textTokens(text){
 function layoutText(w,text,left){
  const tokens=textTokens(text);
  if(!thaiScript.test(text))return tokens;
- const maxWidth=Math.max(1,w.$contents_width()-left),out=[],font=w.$contents().$font();
+ const maxWidth=Math.max(1,w.$contents_width()-left-4),out=[],font=w.$contents().$font();
  const originalSize=font.$size(),widths=new Map();
  let width=0;
  function addWord(word,amount){
@@ -97,20 +97,24 @@ function glyph(win,token,pos){
  }
  literal(()=>{
   const width=win.$text_size(token).$width();
-  win.$contents().$draw_text(pos.x,pos.y,width*2+2,win.$line_height(),token);
+  const remaining=Math.max(0,win.$contents().$width()-pos.x);
+  if(remaining>0)win.$contents().$draw_text(pos.x,pos.y,Math.min(remaining,width+4),win.$line_height(),token);
   pos.x+=width;
  });
 }
 Opal.Window_Base.$$prototype.$draw_text_ex=function(x,y,text){
  this.$reset_font_settings();const pos={x,y,left:x};
  const shown=localText(String(text));let tokens=layoutText(this,shown,x);
- if(thaiScript.test(shown)&&this.$$class===Opal.Window_Help){
-  const font=this.$contents().$font(),rows=Math.max(1,Math.floor(this.$contents_height()/this.$line_height()));
+ if(thaiScript.test(shown)&&this.$class===Opal.Window_Help){
+  const font=this.$contents().$font(),rows=Math.max(1,Math.floor((this.$contents().$height()-y)/this.$line_height()));
   while(tokens.filter(t=>t==='\n').length>=rows&&font.$size()>14){
    font['$size='](font.$size()-1);tokens=layoutText(this,shown,x);
   }
  }
- for(const token of tokens)glyph(this,token,pos);
+ for(const token of tokens){
+  if(pos.y+this.$line_height()>this.$contents().$height())break;
+  glyph(this,token,pos);
+ }
  return pos.x-x;
 };
 Opal.Window_Base.$$prototype.$delete_special_characters=function(text){
@@ -171,7 +175,7 @@ globalThis.playerUI={
    const count=hostMethods.inputPress('C')?tokens.length:1;
    for(let i=0;i<count&&index<tokens.length;i++){
     const token=tokens[index++];
-    if(token==='\n'&&index<tokens.length&&pos.y+w.$line_height()*2>w.$contents_height()){
+    if(token==='\n'&&index<tokens.length&&pos.y+w.$line_height()*2>w.$contents().$height()){
      nextPage=true;waiting=true;w['$pause='](true);break;
     }
     if(token==='\\.'||token==='\\|'){delay=token==='\\.'?15:60;break;}

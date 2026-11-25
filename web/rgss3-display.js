@@ -280,10 +280,29 @@
         case 'bitmap-text':{
           const [id,x,y,w,h,text,align,font,size,color,bold,italic,outline,outColor]=args;
           if(b){
-            b.ctx.fillStyle=String(color);b.ctx.font=fontStyle(font||'Arial',size||24,bold,italic);
-            b.ctx.textBaseline='middle';b.ctx.textAlign=align===1?'center':align===2?'right':'left';
-            if(outline){b.ctx.strokeStyle=outColor;b.ctx.lineWidth=2;b.ctx.lineJoin="round";b.ctx.strokeText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);}
-            b.ctx.fillText(String(text),x+(align===1?w/2:align===2?w:0),y+h/2,w);
+            const ctx=b.ctx,value=String(text),thai=/[\u0e01-\u0e5b]/.test(value);
+            if(w<=0||h<=0)return;
+            ctx.save();
+            try{
+              ctx.fillStyle=String(color);ctx.font=fontStyle(font||'Arial',size||24,bold,italic);
+              ctx.textBaseline='middle';ctx.textAlign=align===1?'center':align===2?'right':'left';
+              let baseline=y+h/2,available=w,anchor=x+(align===1?w/2:align===2?w:0);
+              if(thai){
+                // Measure actual Thai vowel/tone-mark ink, not just Latin line height.
+                ctx.textBaseline='alphabetic';
+                const pad=outline?2:1;available=Math.max(1,w-2*pad);
+                let px=Math.max(1,Number(size)||24),m=ctx.measureText(value);
+                const ink=()=>Math.max(1,(m.actualBoundingBoxAscent||px*.85)+(m.actualBoundingBoxDescent||px*.2));
+                // Fit long labels without excessive horizontal compression.
+                const scale=Math.min(1,available/Math.max(1,m.width),Math.max(1,h-2*pad)/ink());
+                if(scale<1){px=Math.max(1,Math.floor(px*scale));ctx.font=fontStyle(font||'Arial',px,bold,italic);m=ctx.measureText(value);}
+                baseline=y+(h+(m.actualBoundingBoxAscent||px*.85)-(m.actualBoundingBoxDescent||px*.2))/2;
+                anchor=x+(align===1?w/2:align===2?w-pad:pad);
+                ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+              }
+              if(outline){ctx.strokeStyle=outColor;ctx.lineWidth=2;ctx.lineJoin="round";ctx.strokeText(value,anchor,baseline,available);}
+              ctx.fillText(value,anchor,baseline,available);
+            }finally{ctx.restore();}
           }return;
         }
         case 'bitmap-blt':{
