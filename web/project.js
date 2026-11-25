@@ -16,7 +16,15 @@
       this.maps = {}; this.tilesets = []; this.system = null; this.actors = []; this.commonEvents = [];
       this.retainImages=opts.retainImages!==false;
       this.imageCache = new Map();this.liveImages=new Map();
+      this.decodeActive=0;this.decodeQueue=[];
+      this.decodeLimit=4;
       this.retainedBytes=0;this.retainedImages=new Map(); this.missing = new Set();
+    }
+    async decodeAsset(path) {
+      if(this.decodeActive>=this.decodeLimit)await new Promise(resolve=>this.decodeQueue.push(resolve));
+      else this.decodeActive++;
+      try{return await this.decode(await this.source.read(path,32*1024*1024));}
+      finally{const next=this.decodeQueue.shift();if(next)next();else this.decodeActive--;}
     }
     async data(name) {
       return new (VX().MarshalReader)(await this.source.read(`Data/${name}.rvdata2`)).parse(); }
@@ -59,7 +67,7 @@
         for (const file of candidates) {
           const path = `Graphics/${folder}/${file}`;
           if (!this.source.has(path)) continue;
-          try { return await this.decode(await this.source.read(path, 32 * 1024 * 1024)); } catch { /* try next extension */ }
+          try { return await this.decodeAsset(path); } catch { /* try next extension */ }
         }
         this.missing.add(`Graphics/${folder}/${name}`);
         return null;

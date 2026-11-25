@@ -1,6 +1,7 @@
 // Keep the checkpoint outside the numbered manual slots and their localStorage quota.
 const autosaveStore='checkpoints';
-const autosaveInterval=60000;
+const autosaveInterval=new URLSearchParams(location.search).get('perf')==='pi4'?180000:120000;
+const autosaveMinimumGap=30000;
 
 function validCheckpoint(record){
  return Number.isFinite(record?.time) && Array.isArray(record.header?.nodes) && Array.isArray(record.body?.nodes);
@@ -57,6 +58,7 @@ const autosave={
   if(this.mapId!==g.game_map.map_id || this.afterBattle){
    this.mapId=g.game_map.map_id;this.afterBattle=false;this.dueAt=now;this.retryAt=0;
   }
+  if(!leaving && this.lastWrite!==undefined && now-this.lastWrite<autosaveMinimumGap)return;
   if(this.writing || (!leaving && (now<this.retryAt || now<this.dueAt)))return;
   if(!safeToAutosave(g)){this.retryAt=now+250;return;}
   this.dueAt=now+autosaveInterval;this.retryAt=0;
@@ -68,7 +70,7 @@ const autosave={
   try{
    const record=makeSaveRecord(true);
    await this.persist(record);
-   autosaveRecord=record;this.notify?.('บันทึกอัตโนมัติแล้ว');
+   this.lastWrite=now;autosaveRecord=record;this.notify?.('บันทึกอัตโนมัติแล้ว');
   }catch(e){
    const waiting=e instanceof PendingSaveAction;
    if(this.session===session){this.retryAt=now+(waiting?1000:15000);this.dueAt=this.retryAt;}

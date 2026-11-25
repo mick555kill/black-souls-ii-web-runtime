@@ -119,6 +119,7 @@ const crt = (() => {
     const saved = localStorage.getItem('bs2.upscale');
     if ([...selector.options].some(option => option.value === saved)) selector.value = saved;
   } catch { /* Settings last for the current session. */ }
+  if(new URLSearchParams(location.search).get('perf')==='pi4'){toggle.checked=false;selector.value='1';}
   factor = Number(selector.value);
   selector.addEventListener('change', () => {
     factor = Number(selector.value);
