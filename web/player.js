@@ -112,7 +112,7 @@ if(shortMoveProto){
  };
 }
 function scheduleTick(){
- if(active && !document.hidden && !cheatMenu.open && animationRequest===null)
+ if(active && !document.hidden && !cheatMenu.open && !el('save-transfer')?.open && animationRequest===null)
   animationRequest=requestAnimationFrame(tick);
 }
 function pauseTick(){
@@ -121,7 +121,7 @@ function pauseTick(){
 }
 function tick(t){
  animationRequest=null;
- if(!active || document.hidden || cheatMenu.open)return;
+ if(!active || document.hidden || cheatMenu.open || el('save-transfer')?.open)return;
  try{
   if(t-frameTime>=15){
    frameTime=t;const current=Opal.SceneManager.$scene();
@@ -208,7 +208,7 @@ function setPointer(id,key){
 }
 onkeydown=e=>{
  const key=keys[e.key],settings=e.target.closest?.('.pad-settings');
- if(!active || !key || cheatMenu.open || e.target.closest?.('.cheats') || (settings && (settings.open || e.key==='Enter')) || (e.key==='Enter' && e.target.closest?.('.volume')))return;
+ if(!active || !key || cheatMenu.open || el('save-transfer')?.open || e.target.closest?.('.cheats') || (settings && (settings.open || e.key==='Enter')) || (e.key==='Enter' && e.target.closest?.('.volume')))return;
  e.preventDefault();keyboard.set(e.code,key);syncKey(key);
 };
 onkeyup=e=>{
@@ -257,7 +257,7 @@ for(const button of document.querySelectorAll('.actions [data-key]')){
  button.onlostpointercapture=button.onpointerup=button.onpointercancel=releasePointer;
 }
 el('screen').onpointerdown=e=>{
- if(!active||!scene)return;
+ if(!active||!scene||el('save-transfer')?.open)return;
  if(scene.browserBattleMessage){
   heldKeys.add('ok');setTimeout(()=>syncKey('ok'),100);return;
  }
