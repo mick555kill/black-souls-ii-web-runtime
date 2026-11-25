@@ -13,7 +13,7 @@
   class GpuRenderer {
     constructor(output,display,gl){
       this.output=output;this.display=display;this.gl=gl;
-      this.textures=new Map();this.bytes=0;this.limit=32*1024*1024;
+      this.textures=new Map();this.bytes=0;this.limit=(new URLSearchParams(location.search).get('perf')==='pi4'?48:96)*1024*1024;
       this.maxSize=gl.getParameter(gl.MAX_TEXTURE_SIZE);
       this.colors=new Map();this.vertices=new Float32Array(128*6*9);this.stack=[];this.depth=0;this.used=0;
       const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT)?.precision?'highp':'mediump';
