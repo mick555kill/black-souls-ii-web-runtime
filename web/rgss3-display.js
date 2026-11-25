@@ -79,10 +79,15 @@
       return block;
     }
     releaseBlock(block) {
+      this.display.gpu?.release(block.low.canvas);
+      if(block.high)this.display.gpu?.release(block.high.canvas);
       block.low.canvas.width=0;
       if(block.high)block.high.canvas.width=0;
     }
     dispose() {
+      if(this.last){
+        this.display.materialize(this.last.low);this.display.materialize(this.last.high);
+      }
       for(const block of this.blocks.values())this.releaseBlock(block);
       for(const image of this.images.values())if(image)image.width=0;
       this.blocks.clear();this.images.clear();
@@ -99,6 +104,7 @@
         this.paint(block,cell.x,cell.y,frame,true);
         dirty=true;
       }
+      if(dirty){this.display.gpu?.invalidate(block.low.canvas);if(block.high)this.display.gpu?.invalidate(block.high.canvas);}
       return dirty;
     }
     draw(low, high, ox, oy, frame) {
@@ -121,18 +127,10 @@
         this.releaseBlock(old);
       }
       if(!dirty){this.last.frame=frame;return;}
-      low.ctx.clearRect(0,0,low.width,low.height);
       const upper=visible.some(block=>block.high);
-      if(!this.last || this.last.upper || upper || this.last.high!==high) {
-        high.ctx.clearRect(0,0,high.width,high.height);
-        high.version++;
-      }
-      for(const block of visible) {
-        const dx=block.x*32-ox,dy=block.y*32-oy;
-        low.ctx.drawImage(block.low.canvas,dx,dy);
-        if(block.high)high.ctx.drawImage(block.high.canvas,dx,dy);
-      }
-      low.version++;
+      this.display.setTileLayer(low,{blocks:visible,ox,oy,upper:false});
+      if(!this.last || this.last.upper || upper || this.last.high!==high)
+        this.display.setTileLayer(high,{blocks:visible,ox,oy,upper:true});
       this.last={x:ox,y:oy,frame,low,high,upper};
     }
   }
@@ -144,7 +142,71 @@
       this.bitmaps=new Map();this.sprites=new Map();this.tilemaps=new Map();this.viewports=new Map();this.channels=new Map();this.audioGeneration=new Map();
       this.volumePercent=100;this.fadeAlpha=0;this.enabled=false;
       this.maxBitmapPixels=4096*4096;
+      this.tileLayers=new WeakMap();
+      this.soundCache=new Map();this.soundPending=new Map();this.soundBytes=0;
+      this.gpu=null;this.gpuMode='Canvas 2D';
       this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
+    }
+    enableGpu(output,options={}){
+      if(!output || !root.VX.GpuRenderer)return false;
+      if(!this.gpuEvents){
+        this.gpuEvents=true;
+        output.addEventListener('webglcontextlost',event=>{
+          event.preventDefault();this.fallbackGpu('การเชื่อมต่อ WebGL หยุดชั่วคราว');this.render();
+        });
+        output.addEventListener('webglcontextrestored',()=>{if(this.enableGpu(output,options))this.render();});
+      }
+      if(this.gpu)return true;
+      try{
+        const gl=output.getContext('webgl',{alpha:true,antialias:false,depth:false,stencil:false,
+          premultipliedAlpha:true,preserveDrawingBuffer:false,powerPreference:'high-performance',failIfMajorPerformanceCaveat:!options.allowSoftware});
+        if(!gl || gl.isContextLost())throw Error('เบราว์เซอร์ไม่เปิด WebGL ที่เร่งด้วยฮาร์ดแวร์');
+        const ext=gl.getExtension('WEBGL_debug_renderer_info');
+        const device=String(gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER));
+        const software=/swiftshader|llvmpipe|softpipe|software rasterizer|basic render driver|lavapipe/i.test(device);
+        if(software&&!options.allowSoftware)throw Error('เบราว์เซอร์ให้ใช้ได้เฉพาะตัววาดแบบซอฟต์แวร์');
+        this.gpu=new root.VX.GpuRenderer(output,this,gl);
+        this.gpuMode=software?'WebGL · ซอฟต์แวร์':'WebGL';this.gpuDevice=device;
+        this.repaint=true;this.rendererChanged?.();return true;
+      }catch(e){this.fallbackGpu(e.message);return false;}
+    }
+    fallbackGpu(reason){
+      if(this.gpu){this.gpu.output.hidden=true;this.gpu.dispose();this.gpu=null;}
+      this.gpuMode='Canvas 2D'+(reason?' · '+reason:'');this.gpuDevice='';this.repaint=true;this.rendererChanged?.();
+    }
+    setTileLayer(bitmap,layer){
+      this.tileLayers.set(bitmap.canvas,layer);bitmap.version++;
+      if(!this.gpu)this.materialize(bitmap);
+    }
+    materialize(bitmap){
+      const layer=this.tileLayers.get(bitmap.canvas);
+      if(layer){
+        const c=bitmap.ctx;c.clearRect(0,0,bitmap.width,bitmap.height);
+        for(const block of layer.blocks){
+          const ctx=layer.upper?block.high:block.low;
+          if(ctx)c.drawImage(ctx.canvas,block.x*32-layer.ox,block.y*32-layer.oy);
+        }
+        this.tileLayers.delete(bitmap.canvas);this.gpu?.invalidate(bitmap.canvas);
+      }
+    }
+    writable(bitmap){
+      this.materialize(bitmap);
+      if(!bitmap.ctx){
+        const image=bitmap.canvas,cv=this.canvasOf(bitmap.width,bitmap.height),ctx=cv.getContext('2d');
+        ctx.drawImage(image,0,0);this.gpu?.release(image);bitmap.canvas=cv;bitmap.ctx=ctx;
+      }
+      return bitmap.ctx;
+    }
+    pixel(bitmap,x,y){
+      if(bitmap.width<=256 && bitmap.height<=256){
+        if(bitmap.pixelVersion!==bitmap.version){
+          bitmap.pixels=this.writable(bitmap).getImageData(0,0,bitmap.width,bitmap.height).data;bitmap.pixelVersion=bitmap.version;
+        }
+        x=Math.trunc(x);y=Math.trunc(y);
+        if(x<0||y<0||x>=bitmap.width||y>=bitmap.height)return [0,0,0,0];
+        const i=4*(x+y*bitmap.width);return Array.from(bitmap.pixels.subarray(i,i+4));
+      }
+      return Array.from(this.writable(bitmap).getImageData(x,y,1,1).data);
     }
     canvasOf(w,h){
       const sizeW=Number(w),sizeH=Number(h);
@@ -164,9 +226,8 @@
       if(!match)return;
       const image=await project.image(match[1],match[2]);
       if(!image)return;
-      const cv=this.canvasOf(image.width,image.height);
-      cv.getContext('2d').drawImage(image,0,0);
-      bitmap.canvas=cv;bitmap.ctx=cv.getContext('2d');bitmap.width=image.width;bitmap.height=image.height;
+      // File-backed art stays immutable until a Ruby command actually edits its pixels.
+      bitmap.canvas=image;bitmap.ctx=null;bitmap.width=image.width;bitmap.height=image.height;
     }
     drawBitmap(op,args,b,src){
       switch(op){
@@ -246,7 +307,10 @@
       if(!b || (slot!==undefined&&!src))return;
       const resources=src&&src!==b?[b,src]:[b];
       const waits=resources.map(bitmap=>bitmap.tail).filter(Boolean);
-      const draw=()=>{this.drawBitmap(op,args,b,src);b.version++;};
+      const draw=()=>{
+        this.writable(b);if(src)this.materialize(src);
+        this.drawBitmap(op,args,b,src);b.version++;this.gpu?.invalidate(b.canvas);
+      };
       if(!waits.length){draw();return;}
       // Retain the original surfaces across dispose and order later reads and writes.
       const tail=Promise.all(waits).then(draw).catch(e=>console.warn('Bitmap draw:',e));
@@ -279,10 +343,16 @@
           tail.then(()=>{bitmap.ready=true;bitmap.version++;if(bitmap.tail===tail)bitmap.tail=null;});
           return;
         }
-        case 'bitmap-dispose':this.bitmaps.delete(args[0]);return;
+        case 'bitmap-dispose':{
+          const b=this.bitmaps.get(args[0]);
+          if(b){this.gpu?.release(b.canvas);if(b.windowTile)this.gpu?.release(b.windowTile);}
+          this.bitmaps.delete(args[0]);return;
+        }
         case 'bitmap-snapshot':{
           const b=this.bitmaps.get(args[0]);
-          if(b){this.render();b.ctx.drawImage(this.canvas,0,0);b.version++;}
+          if(b){this.render();const c=this.writable(b);
+            if(this.gpu)this.gpu.snapshot(c);else c.drawImage(this.canvas,0,0);
+            b.version++;this.gpu?.invalidate(b.canvas);}
           return;
         }
         case 'tile-table':{
@@ -363,6 +433,14 @@
       return Math.min(x,x2)<right && Math.max(x,x2)>left && Math.min(y,y2)<bottom && Math.max(y,y2)>top;
     }
     render(){
+      if(!this.gpu)return this.renderScene();
+      try{return this.renderScene();}
+      catch(e){
+        if(!this.gpu)throw e;
+        console.warn('WebGL fallback:',e);this.fallbackGpu(e.message);return this.renderScene();
+      }
+    }
+    renderScene(){
       for(const tiles of this.tilemaps.values()){
         if(!tiles.lastDraw?.[6])continue;
         const cache=tiles.chunks;
@@ -404,7 +482,8 @@
       if(!dirty && !flash)return false;
       this.repaint=false;this.lastFade=this.fadeAlpha;
       this.presentedWidth=this.canvas.width;this.presentedHeight=this.canvas.height;
-      const c=this.ctx;c.clearRect(0,0,this.canvas.width,this.canvas.height);
+      const c=this.gpu?.begin(this.canvas.width,this.canvas.height)??this.ctx;
+      if(!this.gpu)c.clearRect(0,0,this.canvas.width,this.canvas.height);
       const layer=s=>this.viewports.get(s.viewport)?.z ?? s.z;
       sprites.sort((a,b)=>layer(a)-layer(b)||Number(!!a.top)-Number(!!b.top)||a.z-b.z||a.y-b.y);
       for(const s of sprites){
@@ -412,6 +491,7 @@
           const v=s.overlay;c.save();c.globalAlpha=strength(v.flash);c.fillStyle=v.flash.color;c.fillRect(...v.rect);c.restore();continue;
         }
         const b=s.lastBitmap,viewport=s.lastViewport;
+        if(!this.gpu || s.plane || s.window)this.materialize(b);
         c.save();
         if(viewport){
           const [vx,vy,vw,vh]=viewport.rect;
@@ -425,8 +505,8 @@
         if(s.blend_type===1)c.globalCompositeOperation='lighter';
         if(s.plane){
           if(b.ready && s.zoom_x>0 && s.zoom_y>0){
-            if(b.patternCanvas!==b.canvas || b.patternVersion!==b.version){
-              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;b.patternVersion=b.version;
+            if(b.patternCanvas!==b.canvas || b.patternVersion!==b.version || b.patternContext!==c){
+              b.pattern=c.createPattern(b.canvas,'repeat');b.patternCanvas=b.canvas;b.patternVersion=b.version;b.patternContext=c;
             }
             const x=viewport?.ox||0,y=viewport?.oy||0;
             c.scale(s.zoom_x,s.zoom_y);c.translate(-s.ox,-s.oy);
@@ -442,7 +522,9 @@
           }
           const left=(s.angle||s.mirror?0:s.x)-s.ox*s.zoom_x+(s.window?12:0);
           const top=(s.angle||s.mirror?0:s.y)-s.oy*s.zoom_y+(s.window?12:0);
-          if(flashing(s)&&s.flash.color){
+          if(flashing(s)&&s.flash.color && this.gpu){
+            c.flash(s.flash.color,strength(s.flash));c.drawImage(b.canvas,sx,sy,w,h,left,top,w*s.zoom_x,h*s.zoom_y);
+          }else if(flashing(s)&&s.flash.color){
             const tmp=this.canvasOf(w,h),ctx=tmp.getContext('2d');
             ctx.drawImage(b.canvas,sx,sy,w,h,0,0,w,h);
             ctx.globalCompositeOperation='source-atop';ctx.fillStyle=s.flash.color;ctx.globalAlpha=strength(s.flash);ctx.fillRect(0,0,w,h);
@@ -453,7 +535,9 @@
         c.restore();
       }
       if(this.fadeAlpha){c.fillStyle=`rgba(0,0,0,${Math.max(0,Math.min(1,this.fadeAlpha))})`;c.fillRect(0,0,this.canvas.width,this.canvas.height);}
-      this.presentationVersion++;return true;
+      this.presentationVersion++;
+      if(this.gpu){this.gpu.finish(this.presentationVersion);this.gpu.output.hidden=false;}
+      return true;
     }
     drawWindow(c,s,b){
       const w=s.windowWidth,h=s.windowHeight,open=s.windowOpenness/255;
@@ -468,10 +552,11 @@
           // individual slices for subpixel placement at interpolation edges.
           const v=s.lastViewport;
           if(Number.isInteger(s.x+(v?v.rect[0]-v.ox:0)) && Number.isInteger(s.y+(v?v.rect[1]-v.oy:0))){
-            if(skin.windowPatternVersion!==skin.version || !skin.windowPattern){
+            if(skin.windowPatternVersion!==skin.version || skin.patternContext!==c || !skin.windowPattern){
               const tile=skin.windowTile??(skin.windowTile=this.canvasOf(64,64));
               const ctx=tile.getContext('2d');ctx.clearRect(0,0,64,64);
               ctx.drawImage(atlas,0,64,64,64,0,0,64,64);
+              this.gpu?.invalidate(tile);skin.patternContext=c;
               skin.windowPattern=c.createPattern(tile,'repeat');skin.windowPatternVersion=skin.version;
             }
             c.save();c.translate(2,2);c.fillStyle=skin.windowPattern;c.fillRect(0,0,w-4,h-4);c.restore();
@@ -544,6 +629,29 @@
         voice.node.stop(end);
       }
     }
+    soundEffect(file,src,ctx){
+      if(this.soundSource!==src){this.soundSource=src;this.soundPending.clear();this.soundCache.clear();this.soundBytes=0;}
+      const key=file.toLowerCase(),hit=this.soundCache.get(key);
+      if(hit){this.soundCache.delete(key);this.soundCache.set(key,hit);return Promise.resolve(hit.buffer);}
+      if(this.soundPending.has(key))return this.soundPending.get(key);
+      const pending=this.decodeAudio(file,src,ctx).then(buffer=>{
+        if(this.soundPending.get(key)!==pending)return buffer;
+        const bytes=buffer.length*buffer.numberOfChannels*4,limit=8*1024*1024;
+        if(bytes<=limit){
+          while(this.soundCache.size && (this.soundBytes+bytes>limit || this.soundCache.size>=40)){
+            const [old,entry]=this.soundCache.entries().next().value;this.soundCache.delete(old);this.soundBytes-=entry.bytes;
+          }
+          this.soundBytes+=bytes;this.soundCache.set(key,{buffer,bytes});
+        }
+        return buffer;
+      }).finally(()=>{if(this.soundPending.get(key)===pending)this.soundPending.delete(key);});
+      this.soundPending.set(key,pending);return pending;
+    }
+    async decodeAudio(file,src,ctx){
+      const bytes=await src.read(file,64*1024*1024);
+      const owned=bytes.byteOffset===0 && bytes.byteLength===bytes.buffer.byteLength;
+      return ctx.decodeAudioData(owned?bytes.buffer:bytes.slice().buffer);
+    }
     async audio(kind,action,name,volume=100,pitch=100,position=0){
       const slot=String(kind).toLowerCase();
       let generation=this.audioGeneration.get(slot)||0;
@@ -555,8 +663,7 @@
       const file=[base,...['ogg','m4a','mp3','wav'].map(ext=>base+'.'+ext)]
         .map(n=>'Audio/'+slot.toUpperCase()+'/'+n).find(key=>src.has(key));
       if(!file)return;
-      const bytes=await src.read(file,64*1024*1024);
-      const buffer=await ctx.decodeAudioData(bytes.slice().buffer);
+      const buffer=await (slot==='se'?this.soundEffect(file,src,ctx):this.decodeAudio(file,src,ctx));
       if(generation!==(this.audioGeneration.get(slot)||0))return;
       if(slot!=='se')this.stopChannel(slot);
       const node=ctx.createBufferSource(),gain=ctx.createGain();
@@ -576,9 +683,12 @@
         this.stopChannel(slot);
       }
       for(const tiles of this.tilemaps.values())tiles.chunks?.dispose();
+      if(this.gpu)for(const source of this.gpu.textures.keys())this.gpu.release(source);
+      this.soundPending.clear();this.soundCache.clear();this.soundBytes=0;
       this.tilemaps.clear();this.viewports.clear();this.bitmaps.clear();this.sprites.clear();this.fadeAlpha=0;
       this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
       this.repaint=true;this.presentationVersion++;
+      if(this.gpu)this.gpu.output.hidden=true;
       if(this.visibleSprites)this.visibleSprites.length=0;
     }
   }

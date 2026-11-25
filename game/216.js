@@ -3,6 +3,12 @@
 
   Opal.add_stubs('!=,flatten,scan,note,!,empty?,to_i,[],each_line,size,==,push,exp_for_level,+,exp_for_level_etc_array,inject,etc_array,>=,*,-,max_level,max_level_lb,each,feature_objects,mlv_plus,param_base,>,over_level_param,param_base_lb,params,class,truncate,olextend_data_1,olextend_data_2,/,to_f,olv_extend,change_color,system_color,draw_text,line_height,level_a,normal_color,level');
   
+  // Above level 99 these modifiers run on every stat read. Decimal literals
+  // are already values. Other notes use the original Ruby binding on each call.
+  function numericModifier(source) {
+    if (typeof source === 'string' && /^[+-]?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]+)?$/.test(source)) return Number(source);
+  }
+
   (function($base, $parent_nesting) {
     var self = $module($base, 'MLV_CHANGE');
 
@@ -87,7 +93,12 @@
         
         if (r == null) r = nil;
         if (array == null) array = nil;
-        return (r = $rb_plus(r, ($truthy($rb_ge(level, array['$[]'](0))) ? ($rb_times(($a = array['$[]'](1), typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["r", "array", "level"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a)), $rb_plus($rb_minus(level, array['$[]'](0)), 1))) : (0))));}, {$$s: self}))} catch($e) {
+        const threshold = array['$[]'](0);
+        if (!$truthy($rb_ge(level, threshold))) return r;
+        $a = array['$[]'](1);
+        const literal = numericModifier($a);
+        const modifier = literal !== undefined ? literal : (typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["r", "array", "level"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
+        return $rb_plus(r, $rb_times(modifier, $rb_plus($rb_minus(level, threshold), 1)));}, {$$s: self}))} catch($e) {
         if ($e === Opal.t_eval_return) return $e.$v;
         throw $e;
       }
@@ -163,7 +174,9 @@
       var $a, self = this, data = nil;
 
       
-      data = ($a = $$$($$('MLV_CHANGE'), 'P_RATE'), typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
+      $a = $$$($$('MLV_CHANGE'), 'P_RATE');
+      const literal = numericModifier($a);
+      data = literal !== undefined ? literal : (typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
       if ($eqeq(data, 0)) {
         return 0
       };
@@ -182,7 +195,10 @@
 
         
         if (f == null) f = nil;
-        return (data = $rb_plus(data, $rb_minus(($a = f.$olv_extend(), typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["f", "data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a)), 100)));}, {$$s: self});
+        $a = f.$olv_extend();
+        const literal = numericModifier($a);
+        const modifier = literal !== undefined ? literal : (typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["f", "data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
+        return (data = $rb_plus(data, $rb_minus(modifier, 100)));}, {$$s: self});
       if ($eqeq(data, 0)) {
         return 0
       };

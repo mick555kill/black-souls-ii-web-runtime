@@ -32,11 +32,14 @@ Opal.defn(Opal.Kernel,'$load_data',function(path){
 let voiceFiles=[];
 async function prepareDatabase(project){
   voiceFiles=project.source.names().filter(path=>/^audio\/voice\/[^/]+$/i.test(path));
-  const names=['Actors','Classes','Skills','Items','Weapons','Armors','Enemies','Troops','States','Animations','Tilesets','CommonEvents','System','MapInfos','Map'+String(project.system.start_map_id).padStart(3,'0')];
+  const names=['Actors','Classes','Skills','Items','Weapons','Armors','Enemies','Troops','States','Animations','Tilesets','CommonEvents','System','MapInfos'];
   for(const name of names){
     const data=rubyValue(await project.data(name));
     database.set('data/'+name.toLowerCase()+'.rvdata2',data);
   }
+  const start=database.get('data/system.rvdata2').start_map_id;
+  const mapName='Map'+String(start).padStart(3,'0');
+  database.set('data/'+mapName.toLowerCase()+'.rvdata2',rubyValue(await project.data(mapName)));
 }
 Opal.$$$("Dir").$glob=function(pattern){
   if(/^Save.*rvdata2$/i.test(pattern))return [];

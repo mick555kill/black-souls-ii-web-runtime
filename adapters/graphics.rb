@@ -1,4 +1,16 @@
 module RGSSWeb
+  # These bridge properties are assigned for every visible and offscreen character.
+  # Define Ruby methods once with the same instance variables and host notifications.
+  def self.display_writers(klass, properties, operation)
+    %x{
+      for (const key of properties) {
+        Opal.defn(klass, '$' + key + '=', function(value) {
+          this[key] = value;
+          return globalThis.rgssHost[operation](this.id, key, value);
+        });
+      }
+    }
+  end
   def self.host
     `globalThis.rgssHost`
   end
@@ -342,12 +354,7 @@ class Sprite
     @src_rect.set(0,0,value ? value.width : 0,value ? value.height : 0)
     RGSSWeb.host.spriteSet(@id,'bitmap',value ? value.id : -1)
   end
-  %i[x y z opacity zoom_x zoom_y visible ox oy angle mirror blend_type].each do |prop|
-    define_method("#{prop}=") do |value|
-      instance_variable_set("@#{prop}",value)
-      RGSSWeb.host.spriteSet(@id,prop.to_s,value)
-    end
-  end
+  RGSSWeb.display_writers(self, %i[x y z opacity zoom_x zoom_y visible ox oy angle mirror blend_type], '$spriteSet')
   def update; nil; end
   def dispose; RGSSWeb.host.spriteDispose(@id) unless @disposed; @disposed=true; end
   def disposed?; !!@disposed; end
@@ -371,12 +378,7 @@ class Viewport
     @ox=@oy=@z=0; @visible=true; @tone=Tone.new; @color=Color.new
   end
   def rect=(value); @rect.set(value); end
-  %i[ox oy z visible].each do |property|
-    define_method("#{property}=") do |value|
-      instance_variable_set("@#{property}", value)
-      RGSSWeb.host.viewportSet(@id, property.to_s, value)
-    end
-  end
+  RGSSWeb.display_writers(self, %i[ox oy z visible], '$viewportSet')
   def disposed?; !!@disposed; end
   def dispose
     RGSSWeb.host.viewportDispose(@id) unless @disposed
@@ -449,12 +451,7 @@ class Window < Sprite
     @windowskin=bmp
     RGSSWeb.host.spriteSet(@id,'skin',bmp ? bmp.id : -1)
   end
-  %i[contents_opacity back_opacity padding padding_bottom pause].each do |attr|
-    define_method("#{attr}=") do |value|
-      instance_variable_set("@#{attr}",value)
-      RGSSWeb.host.spriteSet(@id,attr.to_s,value)
-    end
-  end
+  RGSSWeb.display_writers(self, %i[contents_opacity back_opacity padding padding_bottom pause], '$spriteSet')
   attr_reader :back_opacity
   def width=(value);@width=value.to_i;RGSSWeb.host.spriteSet(@id,'windowWidth',@width);end
   def height=(value);@height=value.to_i;RGSSWeb.host.spriteSet(@id,'windowHeight',@height);end

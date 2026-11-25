@@ -7,6 +7,11 @@ autosave.notify=text=>{
  clearTimeout(autosaveNoticeTimer);autosaveNoticeTimer=setTimeout(()=>{notice.hidden=true;},2600);
 };
 globalThis.display=new VX.RGSS3Display(el('screen'),()=>project);
+display.rendererChanged=()=>{
+ el('screen').style.opacity=display.gpu?'0':'';
+ const status=el('renderer-status');status.textContent=display.gpuMode;status.title=display.gpuDevice||display.gpuMode;
+ crt.apply();
+};
 hostMethods.resize(Opal.Graphics.$width(),Opal.Graphics.$height());
 function errorMessage(error){
  active=false;el('status').classList.add('error');el('status').textContent='หยุดที่ '+(scene?.$$class?.$$name||'เริ่มต้น')+' · '+String(error.message||error);
@@ -57,9 +62,12 @@ el('folder').onchange=async e=>{
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
-  project=await new VX.Project(source).initialize();await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
+  project=new VX.Project(source,{retainImages:false});await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
-  display.enabled=true;active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
+  display.enabled=true;
+  if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('เลือกผ่านลิงก์');
+  else display.enableGpu(el('gpu-screen'));
+  active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
 document.addEventListener('game-language-change',()=>{

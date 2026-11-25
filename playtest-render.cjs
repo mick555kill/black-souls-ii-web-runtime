@@ -2,7 +2,7 @@
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {execFileSync}=require('node:child_process');
 
-async function checkRenderer(ReferenceDisplay) {
+async function checkRenderer(ReferenceDisplay,requireGpu) {
   const assert=(ok,message)=>{if(!ok)throw Error(message);};
   const samePixels=(a,b,message)=>{
     const read=cv=>new Uint32Array(cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data.buffer);
@@ -17,6 +17,7 @@ async function checkRenderer(ReferenceDisplay) {
       v.setInt16(20+2*(x+w*(y+h*z)),cell(x,y,z),true);
     return bytes;
   }
+  const cooperate=()=>requireGpu?Promise.resolve():new Promise(r=>setTimeout(r,0));
   const map=table(64,27,4,(x,y,z)=>{
     if(z===3)return (x+y)%5===1?9:0;
     if(z===2)return (2*x+y)%9===0?9:0;
@@ -52,16 +53,43 @@ async function checkRenderer(ReferenceDisplay) {
   }
   const draw=(d,x,y,frame)=>{command(d,'tile-draw',50,40,41,x,y,frame,true,sheetList);return d.render();};
   const next=fixture(VX.RGSS3Display),prev=ReferenceDisplay?fixture(ReferenceDisplay):null;
-  const pair=prev?[next,prev]:[next];
-  let comparisons=0;
-  function compare(label){if(prev){samePixels(next.canvas,prev.canvas,label);comparisons++;}}
+  const hardware=fixture(VX.RGSS3Display),output=cx(544,416),pixels=cx(544,416);
+  const gpu=hardware.enableGpu(output,{allowSoftware:true});
+  console.log('Canvas fixture ready, WebGL active:',gpu);
+  assert(gpu||!requireGpu,'WebGL test backend unavailable');
+  const pair=[next,...(prev?[prev]:[]),...(gpu?[hardware]:[])];
+  let comparisons=0,gpuComparisons=0;
+  function compare(label){
+    if(prev){samePixels(next.canvas,prev.canvas,label);comparisons++;}
+    if(!gpu)return;
+    assert(hardware.gpu,'unexpected GPU fallback during '+label);
+    const w=next.canvas.width,h=next.canvas.height;
+    if(pixels.width!==w)pixels.width=w;if(pixels.height!==h)pixels.height=h;
+    const ctx=pixels.getContext('2d');hardware.gpu.snapshot(ctx);
+    const a=ctx.getImageData(0,0,w,h).data,b=next.ctx.getImageData(0,0,w,h).data;
+    let total=0,edges=0;
+    for(let i=0;i<a.length;i+=4){
+      let max=Math.abs(a[i+3]-b[i+3]);total+=max;
+      for(let k=0;k<3;k++){
+        const diff=Math.abs(a[i+k]*a[i+3]-b[i+k]*b[i+3])/255;
+        total+=diff;max=Math.max(max,diff);
+      }
+      if(max>8)edges++;
+    }
+    // Different rasterizers cover subpixel edges differently. Integer tile scenes
+    // must match throughout, including animation seams and the map boundary.
+    const tile=label==='first frame'||label.startsWith('scroll ')||label.startsWith('water/waterfall');
+    assert(total/a.length<1.25 && edges<=(tile?0:w*h*.003),label+' GPU diff '+total/a.length+' / '+edges+' pixels');
+    gpuComparisons++;
+  }
   function step(label,x,y,frame){for(const d of pair)draw(d,x,y,frame);compare(label);}
   step('first frame',0,0,0);
   assert(next.render()===false,'idle frame repainted');
   for(const [x,y,f] of [[-17,-11,0],[31,7,0],[248,31,1],[255,36,2],[256,45,3],[289,254,4],[289,255,5],[289,256,6],[1504,450,10],[2019,852,11],[1900,799,0],[25,0,7]]){
-    step('scroll '+[x,y,f],x,y,f);
+    step('scroll '+[x,y,f],x,y,f);await cooperate();
   }
-  for(let f=0;f<12;f++)step('water/waterfall '+f,2,18,f);
+  for(let f=0;f<12;f++){step('water/waterfall '+f,2,18,f);await cooperate();}
+  console.log('Scrolling and animated tile pixels matched');
   for(const d of pair){
     command(d,'viewport-rect',80,10,6,420,315);command(d,'viewport-set',80,'ox',17);
     command(d,'sprite-crop',62,1,2,12,17);set(d,62,'zoom_x',2);
@@ -75,10 +103,10 @@ async function checkRenderer(ReferenceDisplay) {
     set(d,62,'x',100);set(d,62,'angle',25);set(d,62,'mirror',true);
     command(d,'flash','Sprite',62,'rgba(240,80,20,.7)',3,20);
   }
-  for(let f=20;f<=24;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('flash '+f);}
+  for(let f=20;f<=24;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('flash '+f);await cooperate();}
   for(const color of ['rgba(255,127,30,.6)',null]){
     for(const d of pair)command(d,'flash','Viewport',80,color,2,30);
-    for(let f=30;f<=32;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('viewport flash '+f);}
+    for(let f=30;f<=32;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('viewport flash '+f);await cooperate();}
   }
   for(const d of pair){command(d,'fade',.51);d.render();}compare('fade');
   for(const d of pair){
@@ -108,6 +136,12 @@ async function checkRenderer(ReferenceDisplay) {
   for(const d of pair){command(d,'tile-table',50,'map',table(2,3,4,(x,y,z)=>z===0?1536:0));}
   step('smaller map',-4,-5,3);
   for(const d of pair){command(d,'resize',400,300);d.render();}compare('resize');
+  if(gpu){
+    command(hardware,'bitmap-snapshot',42);
+    assert(hardware.bitmaps.get(42).ctx.getImageData(24,14,1,1).data[3]>0,'native snapshot missing map');
+    hardware.fallbackGpu('test');hardware.render();samePixels(hardware.canvas,next.canvas,'context fallback');
+    assert(hardware.enableGpu(output,{allowSoftware:true}),'GPU could not resume');hardware.render();compare('resume GPU');
+  }
   command(next,'bitmap-fill',5,0,0,32,32,'#112233');next.render();
   const ground=next.bitmaps.get(40).ctx.getImageData(12,13,1,1).data;
   assert(ground[0]===17 && ground[1]===34 && ground[2]===51,'edited tilesheet left stale pixels');
@@ -117,7 +151,20 @@ async function checkRenderer(ReferenceDisplay) {
   command(next,'bitmap-load',5,'Tilesets/late');
   next.render();resolveImage(delayed);await next.bitmaps.get(5).tail;next.render();
   assert(next.bitmaps.get(40).ctx.getImageData(12,13,1,1).data[0]===170,'late tile sheet left stale pixels');
-  function measure(Type) {
+  if(gpu){
+    const tile=fixture(VX.RGSS3Display);tile.enableGpu(cx(544,416),{allowSoftware:true});
+    const gl=tile.gpu.gl,stats={drawArrays:0,texImage2D:0,texSubImage2D:0,readPixels:0},orig={};
+    draw(tile,1,1,0);
+    for(const key of Object.keys(stats)){orig[key]=gl[key];gl[key]=function(...args){stats[key]++;return orig[key].apply(this,args);};}
+    try{
+      for(let i=2;i<22;i++)draw(tile,i,1,0);
+      assert(stats.drawArrays>20,'no direct GL draw calls while scrolling');
+      assert(!stats.texImage2D&&!stats.texSubImage2D&&!stats.readPixels,'warmed walk transferred pixels: '+JSON.stringify(stats));
+      const count=stats.drawArrays;tile.render();assert(count===stats.drawArrays,'idle frame rerendered with GL');
+    }finally{for(const key of Object.keys(stats))gl[key]=orig[key];tile.gpu.dispose();}
+  }
+  console.log('Window, snapshot and texture checks finished');
+  async function measure(Type) {
     const d=fixture(Type);draw(d,0,0,0);
     let count=0;
     const contexts=new Set([Object.getPrototypeOf(d.ctx),Object.getPrototypeOf(d.bitmaps.get(40).ctx)]);
@@ -136,6 +183,7 @@ async function checkRenderer(ReferenceDisplay) {
     // Time a warmed route with native drawImage restored, including the final raster flush.
     const times=[];
     for(let run=0;run<3;run++){
+      await cooperate();
       draw(d,0,0,0);d.ctx.getImageData(0,0,1,1);
       const start=performance.now();
       walk();d.ctx.getImageData(0,0,1,1);
@@ -144,10 +192,10 @@ async function checkRenderer(ReferenceDisplay) {
     times.sort((a,b)=>a-b);d.reset();
     return {frames,walkDrawsPerFrame:walkCalls/frames,staticDrawsPerFrame:staticCalls/60,walkMsPerFrame:times[1]};
   }
-  const before=ReferenceDisplay?measure(ReferenceDisplay):null,after=measure(VX.RGSS3Display);
+  const before=ReferenceDisplay?await measure(ReferenceDisplay):null,after=await measure(VX.RGSS3Display);
   assert(after.walkDrawsPerFrame<80,'walking draw count regressed');
   assert(after.staticDrawsPerFrame===0,'static scene draws every frame');
-  return {pixelComparisons:comparisons,before,after};
+  return {pixelComparisons:comparisons,gpuComparisons,before,after};
 }
 
 // Exercise the actual page controls and frame loop with a minimal scene and
@@ -209,8 +257,8 @@ try{
   const reference=process.argv[2];
   const old=reference?execFileSync('git',['show',reference+':web/rgss3-display.js'],{cwd:__dirname,encoding:'utf8'}):'';
   const scripts=[read('web/marshal.js'),read('web/autotile.js'),old,
-    'const reference=window.VX.RGSS3Display;',read('web/rgss3-display.js'),
-    '('+checkRenderer.toString()+')(reference).then(value=>finish({ok:true,...value}),err=>finish({ok:false,error:String(err.stack||err)}));'];
+    'const reference=window.VX.RGSS3Display;',read('web/gpu-renderer.js'),read('web/rgss3-display.js'),
+    '('+checkRenderer.toString()+')(reference,'+(process.env.BROWSER_ENGINE!=='webkit')+').then(value=>finish({ok:true,...value}),err=>finish({ok:false,error:String(err.stack||err)}));'];
   const source=scripts.map((code,i)=>{
     fs.writeFileSync(path.join(dir,'test-'+i+'.js'),code);
     return '<script src="test-'+i+'.js"></script>';
@@ -220,18 +268,19 @@ try{
   const url=require('node:url').pathToFileURL(page).href;
   let result;
   if(process.env.BROWSER_ENGINE==='webkit'){
-    const {webkit}=require('playwright'),browser=await webkit.launch();
+    const {webkit}=require('playwright'),browser=await webkit.launch({headless:!process.env.DISPLAY});
     try{
       const context=await browser.newContext({isMobile:true,hasTouch:true,viewport:{width:1024,height:768},deviceScaleFactor:2});
       const tab=await context.newPage();
-      tab.on('pageerror',err=>console.error(err));
-      await tab.goto(url);await tab.waitForFunction(()=>document.getElementById('result')?.textContent!=='pending');
+      tab.on('pageerror',err=>console.error(err));tab.on('console',msg=>console.log(msg.text()));
+      await tab.goto(url,{waitUntil:'commit'});
+      await tab.waitForFunction(()=>{const el=document.getElementById('result');return el&&el.textContent!=='pending';},null,{polling:200,timeout:90000});
       result=JSON.parse(await tab.locator('#result').textContent());
       if(result.ok)result.player=await checkPlayer(context);
     }finally{await browser.close();}
   }else{
     const chrome=process.env.CHROME_BIN||'google-chrome';
-    const html=execFileSync(chrome,['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
+    const html=execFileSync(chrome,['--headless','--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-dev-shm-usage',
       '--disable-background-networking','--allow-file-access-from-files','--user-data-dir='+path.join(dir,'profile'),'--dump-dom',
       url],{encoding:'utf8',timeout:85000,stdio:['ignore','pipe','pipe']});
     const raw=html.match(/<pre id="result">([\s\S]*?)<\/pre>/)?.[1];

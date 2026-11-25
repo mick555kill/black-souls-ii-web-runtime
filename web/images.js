@@ -17,26 +17,62 @@ function imageDimensions(bytes,png){
  }
  return null;
 }
+// One replaceable record per browser profile. It contains only file signatures and sizes.
+async function openImageIndex(){
+ if(!globalThis.indexedDB)return null;
+ try{
+  return await new Promise((resolve,reject)=>{
+   const request=indexedDB.open('bs2.image-sizes',1);
+   request.onupgradeneeded=()=>request.result.createObjectStore('index');
+   request.onsuccess=()=>resolve(request.result);
+   request.onerror=()=>reject(request.error);
+   request.onblocked=()=>{request.onsuccess=()=>request.result.close();resolve(null);};
+  });
+ }catch{return null;}
+}
 async function indexImageSizes(archive,folder){
- const reads=new Map();
- for(const e of archive.entries)if(/\.(png|jpe?g)$/i.test(e.name))
-  reads.set(imageKey(e.name),{size:e.size,read:n=>archive.readPrefix(e,n)});
- for(const [name,f] of folder.index)if(/\.(png|jpe?g)$/i.test(name))
-  reads.set(imageKey(name),{size:f.size,read:async n=>new Uint8Array(await f.slice(0,n).arrayBuffer())});
- imageMetrics.clear();
- const entries=[...reads];
- for(let offset=0;offset<entries.length;offset+=48){
-  await Promise.all(entries.slice(offset,offset+48).map(async ([key,file])=>{
-   const png=key.endsWith('.png');
-   let count=Math.min(png?24:4096,file.size);
-   while(count){
-    const dims=imageDimensions(await file.read(count),png);
-    if(dims){imageMetrics.set(key,dims);return;}
-    if(png||count===file.size)return;
-    count=Math.min(count*4,file.size);
-   }
-  }));
+ const reads=new Map(),archiveStamp=archive.file.size+':'+archive.file.lastModified;
+ for(const e of archive.entries)if(/\.(png|jpe?g)$/i.test(e.name)){
+  reads.set(imageKey(e.name),{size:e.size,stamp:['a',archiveStamp,e.offset,e.key,e.size].join(':'),read:n=>archive.readPrefix(e,n)});
  }
+ for(const [name,f] of folder.index)if(/\.(png|jpe?g)$/i.test(name)){
+  reads.set(imageKey(name),{size:f.size,stamp:['f',f.webkitRelativePath||name,f.size,f.lastModified].join(':'),read:async n=>new Uint8Array(await f.slice(0,n).arrayBuffer())});
+ }
+ const db=await openImageIndex();
+ let saved=new Map();
+ if(db)try{
+  const rows=await new Promise((resolve,reject)=>{
+   const req=db.transaction('index').objectStore('index').get('last');
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+  if(Array.isArray(rows))saved=new Map(rows);
+ }catch{}
+ imageMetrics.clear();const pending=[],record=[];let changed=false;
+ for(const [key,file] of reads){
+  const row=saved.get(key);
+  if(row?.[0]===file.stamp && Number.isInteger(row[1]) && Number.isInteger(row[2])){
+   imageMetrics.set(key,[row[1],row[2]]);record.push([key,row]);
+  }else pending.push([key,file]);
+ }
+ try{
+  for(let offset=0;offset<pending.length;offset+=48){
+   await Promise.all(pending.slice(offset,offset+48).map(async ([key,file])=>{
+    const png=key.endsWith('.png');let count=Math.min(png?24:4096,file.size);
+    while(count){
+     const dims=imageDimensions(await file.read(count),png);
+     if(dims){imageMetrics.set(key,dims);record.push([key,[file.stamp,...dims]]);changed=true;return;}
+     if(png||count===file.size)return;
+     count=Math.min(count*4,file.size);
+    }
+   }));
+  }
+  if(db && (changed || saved.size!==record.length))try{
+   await new Promise((resolve,reject)=>{
+    const tx=db.transaction('index','readwrite');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);
+    tx.objectStore('index').put(record,'last');
+   });
+  }catch{}
+ }finally{db?.close();}
 }
 rgssHost.$bitmapSize=name=>{
  const key=imageKey(name);
@@ -45,7 +81,7 @@ rgssHost.$bitmapSize=name=>{
 rgssHost.$pixel=(id,x,y)=>{
  const b=globalThis.display?.bitmaps.get(id);
  if(!b?.ready)return [255,255,255,255];
- return Array.from(b.ctx.getImageData(x,y,1,1).data);
+ return display.pixel(b,x,y);
 };
 rgssHost.$measure=(text,font,size,bold,italic)=>{
  const ctx=globalThis.display?.ctx;

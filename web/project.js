@@ -5,7 +5,7 @@
 
   async function defaultDecode(bytes) {
     const blob = new Blob([bytes]);
-    if (typeof createImageBitmap === 'function') return createImageBitmap(blob);
+    if (typeof createImageBitmap === 'function') return createImageBitmap(blob,{premultiplyAlpha:'premultiply'});
     const url = URL.createObjectURL(blob);
     try { const img = new Image(); img.src = url; await img.decode(); return img; } finally { URL.revokeObjectURL(url); }
   }
@@ -14,7 +14,9 @@
     constructor(source, opts = {}) {
       this.source = source; this.archive = source; this.decode = opts.decode || defaultDecode;
       this.maps = {}; this.tilesets = []; this.system = null; this.actors = []; this.commonEvents = [];
-      this.imageCache = new Map(); this.missing = new Set();
+      this.retainImages=opts.retainImages!==false;
+      this.imageCache = new Map();this.liveImages=new Map();
+      this.retainedBytes=0;this.retainedImages=new Map(); this.missing = new Set();
     }
     async data(name) {
       return new (VX().MarshalReader)(await this.source.read(`Data/${name}.rvdata2`)).parse(); }
@@ -43,7 +45,15 @@
     image(folder, name) {
       if (!name) return Promise.resolve(null);
       const key = `${folder}/${name}`;
-      if (this.imageCache.has(key)) return this.imageCache.get(key);
+      if(this.missing.has('Graphics/'+key))return Promise.resolve(null);
+      if(this.imageCache.has(key)){
+        if(this.retainedImages.has(key)){
+          const size=this.retainedImages.get(key);this.retainedImages.delete(key);this.retainedImages.set(key,size);
+        }
+        return this.imageCache.get(key);
+      }
+      const live=this.liveImages.get(key)?.deref();
+      if(live)return Promise.resolve(live);
       const promise = (async () => {
         const candidates=/\.(png|jpe?g)$/i.test(name)?[name]:IMG_EXT.map(ext=>name+'.'+ext);
         for (const file of candidates) {
@@ -55,6 +65,22 @@
         return null;
       })();
       this.imageCache.set(key, promise);
+      const release=()=>{if(this.imageCache.get(key)===promise)this.imageCache.delete(key);};
+      promise.then(image=>{
+        if(!image){release();return;}
+        if(typeof WeakRef==='function'){
+          this.liveImages.delete(key);
+          if(this.liveImages.size>=512)this.liveImages.delete(this.liveImages.keys().next().value);
+          this.liveImages.set(key,new WeakRef(image));
+        }
+        if(!this.retainImages){release();return;}
+        const size=image.width*image.height*4;
+        this.retainedBytes+=size;this.retainedImages.set(key,size);
+        while(this.retainedImages.size>96 || this.retainedBytes>32*1024*1024){
+          const [old,bytes]=this.retainedImages.entries().next().value;
+          this.retainedImages.delete(old);this.imageCache.delete(old);this.retainedBytes-=bytes;
+        }
+      },release);
       return promise;
     }
     async sheetsFor(map) {

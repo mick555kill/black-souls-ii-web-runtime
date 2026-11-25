@@ -130,6 +130,7 @@
     $def(self, '$jump_height', function $$jump_height() {
       var self = this;
 
+      if (self.jump_count === 0 && Number.isFinite(self.jump_peak)) return 0;
       return $rb_divide($rb_minus($rb_times(self.jump_peak, self.jump_peak), $rb_minus(self.jump_count, self.jump_peak).$abs()['$**'](2)), 2)
     });
     
