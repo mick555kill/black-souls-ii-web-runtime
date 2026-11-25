@@ -145,7 +145,7 @@
       this.tileLayers=new WeakMap();
       this.soundCache=new Map();this.soundPending=new Map();this.soundBytes=0;
       this.audioDecodeActive=0;this.audioDecodeQueue=[];
-      this.audioDisabled=new URLSearchParams(location.search).get('audio')==='off';
+      this.audioDisabled=new URLSearchParams(root.location?.search||'').get('audio')==='off';
       this.gpu=null;this.gpuMode='Canvas 2D';
       this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
     }
@@ -585,6 +585,13 @@
         if(!center&&i===1&&j===1)continue;
         if(dx[i+1]>dx[i]&&dy[j+1]>dy[j])c.drawImage(img,sx+src[i],sy+src[j],src[i+1]-src[i],src[j+1]-src[j],x+dx[i],y+dy[j],dx[i+1]-dx[i],dy[j+1]-dy[j]);
       }
+    }
+    mapAssetsPending(){
+      for(const tiles of this.tilemaps.values()){
+        if(!tiles.lastDraw?.[6])continue;
+        if(tiles.ids?.some(id=>{const b=this.bitmaps.get(id);return b&&!b.ready;}))return true;
+      }
+      return false;
     }
     drawTiles(id,lowId,highId,ox,oy,frame,visible,sheetIds){
       const tiles=this.tilemaps.get(id);
