@@ -60,10 +60,13 @@
     async readPrefix(entry,size) {
       const data = new Uint8Array(await this.file.slice(entry.offset, entry.offset + Math.min(size,entry.size)).arrayBuffer());
       let key = entry.key;
-      for (let i = 0; i < data.length; i++) {
-        data[i] ^= (key >>> (8 * (i % 4))) & 255;
-        if ((i % 4) === 3) key = (Math.imul(key, 7) + 3) >>> 0;
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      const end = data.length - data.length % 4;
+      for (let i = 0; i < end; i += 4) {
+        view.setUint32(i, view.getUint32(i, true) ^ key, true);
+        key = (Math.imul(key, 7) + 3) >>> 0;
       }
+      for (let i = end; i < data.length; i++) data[i] ^= (key >>> (8 * (i-end))) & 255;
       return data;
     }
   }
