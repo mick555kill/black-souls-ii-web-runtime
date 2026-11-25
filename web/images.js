@@ -55,8 +55,8 @@ async function indexImageSizes(archive,folder){
   }else pending.push([key,file]);
  }
  try{
-  for(let offset=0;offset<pending.length;offset+=48){
-   await Promise.all(pending.slice(offset,offset+48).map(async ([key,file])=>{
+  for(let offset=0;offset<pending.length;offset+=8){
+   await Promise.all(pending.slice(offset,offset+8).map(async ([key,file])=>{
     const png=key.endsWith('.png');let count=Math.min(png?24:4096,file.size);
     while(count){
      const dims=imageDimensions(await file.read(count),png);
