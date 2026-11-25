@@ -52,6 +52,10 @@
   // instances of these two known runtime classes only, not arbitrary file classes.
   const record={time,header:toGraph(header),body:toGraph(body)};
   const hash=record.body.nodes[record.body.root[0]];
+  for(const [key,klass] of [['system','Game_System'],['timer','Game_Timer'],['switches','Game_Switches'],['variables','Game_Variables'],['self_switches','Game_SelfSwitches'],['actors','Game_Actors'],['party','Game_Party'],['map','Game_Map'],['player','Game_Player']]){
+   const ref=hash.data.find(([k])=>k===key)?.[1];
+   if(!Array.isArray(ref)||record.body.nodes[ref[0]]?.type!==klass)throw Error('Invalid native save field: '+key);
+  }
   for(const [key,klass] of [['message','Game_Message'],['troop','Game_Troop']]){
    if(hash.data.some(([k])=>k===key))continue;
    const graph=packSave(Opal[klass].$new()),offset=record.body.nodes.length;
