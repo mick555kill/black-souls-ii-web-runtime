@@ -65,9 +65,28 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
 globalThis.rgssHost = Object.fromEntries(Object.entries(hostMethods).map(([k,v])=>['$'+k,v]));
 Opal.require('corelib/string/unpack');
 Opal.require('opal/compiler');
+const compiledCodeCache=new Map();
+let compiledCodeBytes=0;
 Opal.compile=(source,options={})=>{
  if(Object.hasOwn(dynamicMethods,source))return dynamicMethods[source];
- return String(Opal.Opal.Compiler.$new(String(source),Opal.hash({...options,eval:true})).$compile());
+ const config={...options,eval:true};
+ const plain=Object.values(config).every(v=>v==null||['string','number','boolean'].includes(typeof v)||Array.isArray(v)&&v.every(x=>typeof x==='string'));
+ const key=plain?JSON.stringify([String(source),config]):null;
+ if(key!==null&&compiledCodeCache.has(key)){
+  const hit=compiledCodeCache.get(key);compiledCodeCache.delete(key);compiledCodeCache.set(key,hit);return hit;
+ }
+ const code=String(Opal.Opal.Compiler.$new(String(source),Opal.hash(config)).$compile());
+ if(key!==null){
+  const bytes=2*(key.length+code.length),limit=2*1024*1024;
+  if(bytes<=limit){
+   while(compiledCodeCache.size&&(compiledCodeBytes+bytes>limit||compiledCodeCache.size>=256)){
+    const old=compiledCodeCache.keys().next().value;
+    compiledCodeBytes-=2*(old.length+compiledCodeCache.get(old).length);compiledCodeCache.delete(old);
+   }
+   compiledCodeCache.set(key,code);compiledCodeBytes+=bytes;
+  }
+ }
+ return code;
 };
 const binaryMinus=Opal.rb_minus;
 Opal.rb_minus=function(left,right){return arguments.length===1?left['$-@']():binaryMinus(left,right);};
