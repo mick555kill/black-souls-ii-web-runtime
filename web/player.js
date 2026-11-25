@@ -29,6 +29,7 @@ async function loadMapData(id){
  if(pendingMaps.has(key))return pendingMaps.get(key);
  const startedAt=performance.now();
  const task=project.loadMap(id).then(map=>{
+  if(pendingMaps.get(key)!==task)throw Error('Map load superseded: '+id);
   database.set(key,rubyValue(map));
   perfStats.mapLoads++;perfStats.mapMs=performance.now()-startedAt;
   const current='data/map'+String(Opal.gvars.game_map?.map_id).padStart(3,'0')+'.rvdata2';
@@ -39,25 +40,43 @@ async function loadMapData(id){
    if(i<0)break;
    database.delete(keys.splice(i,1)[0]);
   }
- }).finally(()=>pendingMaps.delete(key));
+ }).finally(()=>{if(pendingMaps.get(key)===task)pendingMaps.delete(key);});
  pendingMaps.set(key,task);return task;
 }
 // Warm the destination's actual tileset and parallax before reserving a transfer.
+function travelDeadline(promise,ms,message){
+ let timer;
+ return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(message)),ms);})]).finally(()=>clearTimeout(timer));
+}
+async function loadRequiredMap(id){
+ const key='data/map'+String(id).padStart(3,'0')+'.rvdata2';
+ const promise=loadMapData(id),pending=pendingMaps.get(key);
+ try{await travelDeadline(promise,12000,'Map '+id+' load timed out — retry');}
+ catch(error){if(pending&&pendingMaps.get(key)===pending)pendingMaps.delete(key);throw error;}
+}
 async function prepareMapTransfer(id){
  const started=performance.now();
- await loadMapData(id);
+ await loadRequiredMap(id);
  const map=database.get('data/map'+String(id).padStart(3,'0')+'.rvdata2');
  const tileset=database.get('data/tilesets.rvdata2')?.[map?.tileset_id];
  const names=tileset?.tileset_names;
  const tasks=[];
  if(Array.isArray(names))for(const name of new Set(names))if(typeof name==='string'&&name)tasks.push(project.image('Tilesets',name));
  if(typeof map?.parallax_name==='string'&&map.parallax_name)tasks.push(project.image('Parallaxes',map.parallax_name));
- const assets=await Promise.all(tasks);
+ // File-backed art is optional for the transfer itself. Keep pending image
+ // requests alive in Project's cache and allow the map renderer to finish them.
+ let assets=[];
+ try{assets=await travelDeadline(Promise.all(tasks),1200,'Image preload still running');}
+ catch(error){console.info('Map art continues loading:',id,error.message);}
  perfStats.mapAssetsMs=performance.now()-started;perfStats.mapAssetsCount=assets.filter(Boolean).length;
  return assets;
 }
-// ShortMove invokes perform_transfer synchronously, bypassing event command 201.
+// Fast travel is completed by the normal game tick after the destination data
+// is ready. Never leave the confirmation inactive waiting for optional artwork.
 const shortMoveProto=Opal.Scene_ShortMove?.$$prototype;
+const travelNotice=el('travel-status');
+function showTravelStatus(message){if(travelNotice){travelNotice.textContent=message;travelNotice.hidden=!message;}}
+let mapWaitStart=0;
 if(shortMoveProto){
  const originalPopOk=shortMoveProto.$pop_ok;
  shortMoveProto.$pop_ok=function(){
@@ -65,25 +84,31 @@ if(shortMoveProto){
   if(this.popup_window.$current_ext()!==1)return originalPopOk.call(this);
   const point=this.command_window.$current_ext();
   const id=point['$[]'](0)['$[]'](1)['$[]'](0);
-  this.browserTravelPending=true;
+  const state={id,ready:false,error:null,assets:null};
+  this.browserTravelPending=state;
   this.popup_window.$deactivate();
-  const notice=el('autosave-status');
-  notice.textContent='กำลังโหลดฉากปลายทาง…';notice.hidden=false;
-  prepareMapTransfer(id).then(assets=>{
-   if(!active||Opal.SceneManager.$scene()!==this)return;
-   // Keep decoded assets alive until the original transfer finishes.
-   this.browserTravelAssets=assets;
-   try{originalPopOk.call(this);}finally{this.browserTravelAssets=null;}
-  }).catch(error=>{
-   console.error('Fast travel:',error);
-   notice.textContent='โหลดฉากไม่สำเร็จ: '+String(error.message||error);
-   notice.hidden=false;
-   if(active&&Opal.SceneManager.$scene()===this)this.popup_window.$activate();
-  }).finally(()=>{
-   this.browserTravelPending=false;
-   if(Opal.SceneManager.$scene()!==this)notice.hidden=true;
-  });
+  showTravelStatus('กำลังโหลดแผนที่ '+id+'…');
+  prepareMapTransfer(id).then(assets=>{state.assets=assets;state.ready=true;},error=>{state.error=error;});
   return Opal.nil;
+ };
+ shortMoveProto.$browser_finish_travel=function(){
+  const state=this.browserTravelPending;
+  if(!state)return false;
+  if(state.error){
+   this.browserTravelPending=null;
+   this.popup_window.$activate();
+   showTravelStatus('โหลดแผนที่ '+state.id+' ไม่สำเร็จ: '+String(state.error.message||state.error)+' · กดเดินทางอีกครั้ง');
+   console.error('Fast travel:',state.error);
+   return true;
+  }
+  if(!state.ready)return true;
+  this.browserTravelPending=null;
+  showTravelStatus('กำลังเข้าสู่ฉาก '+state.id+'…');
+  try{originalPopOk.call(this);}
+  catch(error){showTravelStatus('เดินทางไม่สำเร็จ: '+String(error.message||error));throw error;}
+  if(Opal.SceneManager.$scene()!==this)showTravelStatus('');
+  else{this.popup_window.$activate();showTravelStatus('ยังไม่ได้ย้ายฉาก · ลองกดเดินทางใหม่');}
+  return true;
  };
 }
 function scheduleTick(){
@@ -112,7 +137,14 @@ function tick(t){
    }
    // Direct transfers and restored saves can bypass the event preload.
    // Keep rendering while their map sheets finish, but don't advance map input.
-   const waitForMap=scene.$$class===Opal.Scene_Map&&display.mapAssetsPending();
+   if(scene.$$class===Opal.Scene_ShortMove&&scene.$browser_finish_travel?.()){
+    display.render();crt.draw();scheduleTick();return;
+   }
+   const pendingArt=scene.$$class===Opal.Scene_Map&&display.mapAssetsPending();
+   if(!pendingArt){if(mapWaitStart)showTravelStatus('');mapWaitStart=0;}
+   else if(!mapWaitStart){mapWaitStart=t;showTravelStatus('กำลังโหลดภาพฉาก…');}
+   const waitForMap=pendingArt&&t-mapWaitStart<8000;
+   if(pendingArt&&!waitForMap)showTravelStatus('ภาพฉากยังโหลดอยู่ · เปิดให้เล่นต่อแล้ว');
    if(profileEnabled){
     const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
