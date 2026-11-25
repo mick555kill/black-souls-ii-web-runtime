@@ -5,6 +5,9 @@ const mapCacheLimit=lowPowerMode?4:8;
 const pendingMaps=new Map();
 let project,scene,active=false,frameTime=0,animationRequest=null;
 let autosaveNoticeTimer;
+const profileEnabled=new URLSearchParams(location.search).has('profile');
+const perfStats={frames:0,updateMs:0,renderMs:0,slowFrames:0,mapLoads:0,mapMs:0,lastReport:performance.now()};
+globalThis.runtimePerf=()=>({...perfStats,renderer:display.gpuMode,bitmaps:display.bitmaps.size,sprites:display.sprites.size,textureBytes:display.gpu?.bytes??0,decodedImageBytes:project?.retainedBytes??0,compiledCodeBytes,mapCache:[...database.keys()].filter(k=>/^data\/map\d+\.rvdata2$/.test(k)).length});
 autosave.notify=text=>{
  const notice=el('autosave-status');notice.textContent=text;notice.hidden=false;
  clearTimeout(autosaveNoticeTimer);autosaveNoticeTimer=setTimeout(()=>{notice.hidden=true;},2600);
@@ -24,8 +27,10 @@ async function loadMapData(id){
  const key='data/map'+String(id).padStart(3,'0')+'.rvdata2';
  if(database.has(key)){const value=database.get(key);database.delete(key);database.set(key,value);return;}
  if(pendingMaps.has(key))return pendingMaps.get(key);
+ const startedAt=performance.now();
  const task=project.loadMap(id).then(map=>{
   database.set(key,rubyValue(map));
+  perfStats.mapLoads++;perfStats.mapMs=performance.now()-startedAt;
   const current='data/map'+String(Opal.gvars.game_map?.map_id).padStart(3,'0')+'.rvdata2';
   const start='data/map'+String(database.get('data/system.rvdata2').start_map_id).padStart(3,'0')+'.rvdata2';
   const keys=[...database.keys()].filter(k=>/^data\/map\d+\.rvdata2$/.test(k));
@@ -61,8 +66,14 @@ function tick(t){
     cheatMenu.hidden=![Opal.Scene_Map,Opal.Scene_Battle].includes(scene.$$class);
 
    }
-   scene.$update();display.render();
-   crt.draw();
+   if(profileEnabled){
+    const u=performance.now();scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
+    perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
+    if(done-perfStats.lastReport>=5000){
+     console.info('Runtime profile',globalThis.runtimePerf());
+     perfStats.frames=perfStats.updateMs=perfStats.renderMs=perfStats.slowFrames=0;perfStats.lastReport=done;
+    }
+   }else{scene.$update();display.render();crt.draw();}
    autosave.update(scene,t);
   }
   scheduleTick();
