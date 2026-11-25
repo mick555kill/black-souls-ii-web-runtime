@@ -144,7 +144,7 @@
       this.maxBitmapPixels=4096*4096;
       this.tileLayers=new WeakMap();
       this.soundCache=new Map();this.soundPending=new Map();this.soundBytes=0;
-      this.audioDecodeActive=0;this.audioDecodeQueue=[];
+      this.audioDecodeActive=0;this.audioDecodeQueue=[];this.musicRequests=new Map();
       this.audioDisabled=new URLSearchParams(root.location?.search||'').get('audio')==='off';
       this.gpu=null;this.gpuMode='Canvas 2D';
       this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
@@ -626,20 +626,25 @@
       if(this.audioContext.state==='suspended')this.audioContext.resume().catch(console.warn);
     }
     stopChannel(slot,ms=0){
+      const ctx=this.audioContext;if(!ctx)return;
       for(const voice of this.channels.get(slot)||[]){
-        const now=this.audioContext.currentTime, end=now+Math.max(0,ms)/1000;
-        voice.gain.gain.cancelScheduledValues(now);
-        voice.gain.gain.setValueAtTime(voice.gain.gain.value,now);
-        voice.gain.gain.linearRampToValueAtTime(0,end);
-        voice.node.stop(end);
+        if(voice.stopping&&ms>0)continue;
+        const now=ctx.currentTime,end=now+Math.max(0,ms)/1000;
+        voice.stopping=true;
+        try{
+          const gain=voice.gain.gain,current=gain.value;
+          gain.cancelScheduledValues(now);gain.setValueAtTime(current,now);
+          if(ms>0)gain.linearRampToValueAtTime(0,end);else gain.setValueAtTime(0,now);
+          voice.node.stop(end);
+        }catch(e){try{voice.node.disconnect();voice.gain.disconnect();}catch{}this.channels.get(slot)?.delete(voice);}
       }
     }
-    soundEffect(file,src,ctx){
+    soundEffect(file,src,ctx,priority=false){
       if(this.soundSource!==src){this.soundSource=src;this.soundPending.clear();this.soundCache.clear();this.soundBytes=0;}
       const key=file.toLowerCase(),hit=this.soundCache.get(key);
       if(hit){this.soundCache.delete(key);this.soundCache.set(key,hit);return Promise.resolve(hit.buffer);}
       if(this.soundPending.has(key))return this.soundPending.get(key);
-      const pending=this.decodeAudio(file,src,ctx).then(buffer=>{
+      const pending=this.decodeAudio(file,src,ctx,priority).then(buffer=>{
         if(this.soundPending.get(key)!==pending)return buffer;
         const bytes=buffer.length*buffer.numberOfChannels*4,limit=24*1024*1024;
         if(bytes<=limit){
@@ -652,8 +657,8 @@
       }).finally(()=>{if(this.soundPending.get(key)===pending)this.soundPending.delete(key);});
       this.soundPending.set(key,pending);return pending;
     }
-    async decodeAudio(file,src,ctx){
-      if(this.audioDecodeActive>=2)await new Promise(resolve=>this.audioDecodeQueue.push(resolve));
+    async decodeAudio(file,src,ctx,priority=false){
+      if(this.audioDecodeActive>=2)await new Promise(resolve=>priority?this.audioDecodeQueue.unshift(resolve):this.audioDecodeQueue.push(resolve));
       else this.audioDecodeActive++;
       try{
         const bytes=await src.read(file,64*1024*1024);
@@ -664,35 +669,67 @@
       }
     }
     async audio(kind,action,name,volume=100,pitch=100,position=0){
-      const slot=String(kind).toLowerCase();
+      const slot=String(kind).toLowerCase(),loop=slot==='bgm'||slot==='bgs';
       let generation=this.audioGeneration.get(slot)||0;
-      if(action!=='play' || slot!=='se')this.audioGeneration.set(slot,++generation);
-      if(action!=='play'){this.stopChannel(slot,action==='fade'?volume:0);return;}
-      const src=this.getProject()?.source, ctx=this.audioContext;
-      if(this.audioDisabled || !src || !ctx || !name)return;
+      if(action!=='play'){
+        this.audioGeneration.set(slot,++generation);this.musicRequests.delete(slot);
+        this.stopChannel(slot,action==='fade'?volume:0);return;
+      }
+      const src=this.getProject()?.source,ctx=this.audioContext;
+      if(this.audioDisabled||!src||!ctx)return;
+      if(!name){
+        if(slot!=='se'){this.audioGeneration.set(slot,++generation);this.musicRequests.delete(slot);this.stopChannel(slot);}
+        return;
+      }
       const base=String(name).replace(/\\/g,'/').replace(/^Audio\/(BGM|BGS|ME|SE)\//i,'');
       const file=[base,...['ogg','m4a','mp3','wav'].map(ext=>base+'.'+ext)]
         .map(n=>'Audio/'+slot.toUpperCase()+'/'+n).find(key=>src.has(key));
       if(!file)return;
-      // Do not enqueue an unlimited number of short effects behind scene music.
-      if(slot==='se'&&!this.soundPending.has(file.toLowerCase())&&!this.soundCache.has(file.toLowerCase())&&this.soundPending.size>=8)return;
-      const buffer=await this.soundEffect(file,src,ctx);
-      if(generation!==(this.audioGeneration.get(slot)||0))return;
-      if(slot!=='se')this.stopChannel(slot);
-      const node=ctx.createBufferSource(),gain=ctx.createGain();
-      node.buffer=buffer;node.loop=slot==='bgm'||slot==='bgs';
-      node.playbackRate.value=Math.max(0.01,pitch/100);
-      gain.gain.value=Math.max(0,Math.min(1,volume/100));
-      node.connect(gain);gain.connect(this.masterGain);
-      const voices=this.channels.get(slot)||new Set(),voice={node,gain};
-      this.channels.set(slot,voices);
-      if(slot==='se'&&voices.size>=12){const old=voices.values().next().value;voices.delete(old);try{old.node.stop();}catch{}}
-      voices.add(voice);
-      node.onended=()=>{voices.delete(voice);node.disconnect();gain.disconnect();};
-      const offset=Math.max(0,position/1000);
-      node.start(0,node.loop?offset%buffer.duration:Math.min(offset,buffer.duration));
+      const key=file.toLowerCase();
+      if(slot==='se'&&!this.soundPending.has(key)&&!this.soundCache.has(key)&&this.soundPending.size>=8)return;
+      if(loop){
+        // Map autoplay may request the same song twice. Keep its position and
+        // update the gain instead of invalidating an identical pending decode.
+        const request=this.musicRequests.get(slot);
+        if(request?.file===key&&request.position===position){
+          request.volume=volume;request.pitch=pitch;
+          if(request.voice&&!request.voice.stopping){
+            request.voice.gain.gain.setTargetAtTime(Math.max(0,Math.min(1,volume/100)),ctx.currentTime,.015);
+            request.voice.node.playbackRate.value=Math.max(.01,pitch/100);
+          }
+          return;
+        }
+      }
+      if(slot!=='se')this.audioGeneration.set(slot,++generation);
+      const request={file:key,position,volume,pitch,voice:null};
+      if(loop)this.musicRequests.set(slot,request);
+      const requestedAt=performance.now();
+      try{
+        const buffer=await this.soundEffect(file,src,ctx,slot!=='se');
+        if(generation!==(this.audioGeneration.get(slot)||0))return;
+        // Stale effects shouldn't play seconds after a scene has changed.
+        if(slot==='se'&&performance.now()-requestedAt>1500)return;
+        if(slot!=='se')this.stopChannel(slot);
+        const node=ctx.createBufferSource(),gain=ctx.createGain();
+        node.buffer=buffer;node.loop=loop;
+        node.playbackRate.value=Math.max(.01,request.pitch/100);
+        gain.gain.value=Math.max(0,Math.min(1,request.volume/100));
+        node.connect(gain);gain.connect(this.masterGain);
+        const voices=this.channels.get(slot)||new Set(),voice={node,gain,stopping:false};
+        this.channels.set(slot,voices);
+        if(slot==='se'&&voices.size>=12){const old=voices.values().next().value;voices.delete(old);try{old.node.stop();}catch{}}
+        voices.add(voice);request.voice=voice;
+        node.onended=()=>{voices.delete(voice);node.disconnect();gain.disconnect();if(this.musicRequests.get(slot)===request)this.musicRequests.delete(slot);};
+        const offset=Math.max(0,position/1000);
+        try{node.start(0,loop?offset%buffer.duration:Math.min(offset,buffer.duration));}
+        catch(error){voices.delete(voice);node.disconnect();gain.disconnect();throw error;}
+      }catch(error){
+        if(this.musicRequests.get(slot)===request)this.musicRequests.delete(slot);
+        throw error;
+      }
     }
     reset(){
+      this.musicRequests.clear();
       for(const slot of ['bgm','bgs','me','se']){
         this.audioGeneration.set(slot,(this.audioGeneration.get(slot)||0)+1);
         this.stopChannel(slot);
