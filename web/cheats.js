@@ -17,6 +17,7 @@ cheatMenu.ontoggle=()=>{
   pauseTick();releaseControls();
   populateCheatItems();
   feedback.textContent='';
+  refreshSenControl();
  }else if(active){el('screen').focus();scheduleTick();}
 };
 category.onchange=populateCheatItems;
@@ -37,6 +38,37 @@ el('money-form').onsubmit=event=>{
  const party=Opal.gvars.game_party,before=party.$gold();
  party.$gain_gold(amount);
  feedback.textContent='เงิน +'+(party.$gold()-before)+' · มีทั้งหมด '+party.$gold();
+};
+// SEN is game variable 38, not the party's gold. Keep its threshold switches
+// consistent with the original interpreter in game/118.js.
+function refreshSenControl(){
+ const value=Opal.gvars.game_variables?.['$[]'](38);
+ el('sen-current').textContent=Number.isFinite(value)?String(value):'—';
+}
+function changeSen(delta){
+ if(!Number.isSafeInteger(delta))throw Error('Invalid SEN amount');
+ const variables=Opal.gvars.game_variables,switches=Opal.gvars.game_switches;
+ const before=variables['$[]'](38);
+ if(!Number.isFinite(before))throw Error('Invalid current SEN');
+ const after=Math.max(0,Math.min(100,before+delta));
+ variables['$[]='](38,after);
+ switches['$[]='](14,after<=0);
+ switches['$[]='](15,after<=30);
+ switches['$[]='](16,after<=70);
+ return {before,after};
+}
+el('sen-form').onsubmit=event=>{
+ event.preventDefault();
+ if(!active)return;
+ const amount=el('sen-amount').valueAsNumber;
+ if(!Number.isSafeInteger(amount)||amount<1||amount>100)return;
+ try{
+  const delta=event.submitter?.value==='decrease'?-amount:amount;
+  const {before,after}=changeSen(delta);
+  refreshSenControl();
+  const changed=after-before;
+  feedback.textContent='SEN '+(changed>=0?'+':'')+changed+' · ปัจจุบัน '+after;
+ }catch(error){feedback.textContent=String(error.message||error);}
 };
 const oneHit=el('one-hit');
 const enemyPrototype=Opal.Game_Enemy.$$prototype;
