@@ -403,7 +403,7 @@ const thaiLines=new Map([
  ["Grimm", "กริมม์"],
  ["Souls on Hand", "วิญญาณที่มีอยู่"],
  ["\"Welcome back, Lord \\n[1]. Is there anything I may help you with?\"", "ยินดีต้อนรับกลับค่ะ ท่าน \\n[1] มีอะไรให้ข้าช่วยไหมคะ?"],
- ["\"I wish you safe travels, Lord \\n[1].\"", "ขอให้ท่านเดินทางโดยสวัสดิภาพ ท่าน \\n[1]"],
+ ["\"I wish you safe travels, Lord \\n[1].\"", "ขอให้เดินทางโดยสวัสดิภาพ ท่าน \\n[1]"],
  ["\"Lord \\n[1]. I have heard that you've traveled far in your search for Alice.\\! However, please allow me to give you a piece of advice.\"", "ท่าน \\n[1] ข้าได้ยินว่าท่านเดินทางมาไกลเพื่อตามหาอลิส\\! ขอให้ข้าได้เตือนท่านสักเรื่องนะคะ"],
  ["Buy colored souls", "ซื้อวิญญาณสี"],
  ["Library Dream", "ความฝันในห้องสมุด"],
