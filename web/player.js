@@ -80,15 +80,18 @@ function tick(t){
     cheatMenu.hidden=![Opal.Scene_Map,Opal.Scene_Battle].includes(scene.$$class);
 
    }
+   // Direct transfers and restored saves can bypass the event preload.
+   // Keep rendering while their map sheets finish, but don't advance map input.
+   const waitForMap=scene.$class===Opal.Scene_Map&&display.mapAssetsPending();
    if(profileEnabled){
-    const u=performance.now();scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
+    const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
     if(done-perfStats.lastReport>=5000){
      if(globalThis.runtimeProbe)runtimeProbe.report(perfStats);else console.info('Runtime profile',globalThis.runtimePerf());
      perfStats.frames=perfStats.updateMs=perfStats.renderMs=perfStats.slowFrames=0;perfStats.lastReport=done;
     }
-   }else{scene.$update();display.render();crt.draw();}
-   autosave.update(scene,t);
+   }else{if(!waitForMap)scene.$update();display.render();crt.draw();}
+   if(!waitForMap)autosave.update(scene,t);
   }
   scheduleTick();
  }catch(e){errorMessage(e);}
