@@ -70,7 +70,7 @@ function tick(t){
     const u=performance.now();scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
     if(done-perfStats.lastReport>=5000){
-     console.info('Runtime profile',globalThis.runtimePerf());
+     if(globalThis.runtimeProbe)runtimeProbe.report(perfStats);else console.info('Runtime profile',globalThis.runtimePerf());
      perfStats.frames=perfStats.updateMs=perfStats.renderMs=perfStats.slowFrames=0;perfStats.lastReport=done;
     }
    }else{scene.$update();display.render();crt.draw();}
