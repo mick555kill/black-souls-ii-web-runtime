@@ -42,5 +42,6 @@ jobs:
         env:
           REFERENCE_REV: ${{ github.event.pull_request.base.sha || 'HEAD' }}
           BROWSER_ENGINE: webkit
+          LIBGL_ALWAYS_SOFTWARE: "1"
           NODE_PATH: ${{ runner.temp }}/bs2-webkit/node_modules
-        run: node playtest-render.cjs "$REFERENCE_REV"
+        run: xvfb-run -a node playtest-render.cjs "$REFERENCE_REV"

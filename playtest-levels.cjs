@@ -22,7 +22,16 @@ try{
       assert.equal(actor.level,level);
     }
   }
-  assert.equal(compiles,0,'integer modifiers entered the Ruby compiler');
+  const klass=Opal.RPG.Class.$allocate();
+  klass.$exp_for_level_etc_array=l=>l*100;
+  let entries=[[5,'10'],[9,'2.5']];
+  klass.$etc_array=()=>entries;
+  assert.equal(klass.$exp_for_level(4),400);
+  assert.equal(klass.$exp_for_level(10),1065);
+  assert.equal(compiles,0,'numeric modifiers entered the Ruby compiler');
+  entries=[[5,'10'],[9,'r + level']];
+  assert.equal(klass.$exp_for_level(10),1200);
+  assert.equal(klass.$exp_for_level(11),1413);
   note='150';assert.equal(actor.$olextend_data_2(),1.5);
   note='data + f.bonus';assert.equal(actor.$olextend_data_2(),1.08);
   bonus=20;assert.equal(actor.$olextend_data_2(),1.2);

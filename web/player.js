@@ -64,7 +64,10 @@ el('folder').onchange=async e=>{
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
   project=new VX.Project(source,{retainImages:false});await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
-  display.enabled=true;display.enableGpu(el('gpu-screen'));active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
+  display.enabled=true;
+  if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('เลือกผ่านลิงก์');
+  else display.enableGpu(el('gpu-screen'));
+  active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
  }catch(e){el('folder').disabled=false;errorMessage(e);}
 };
 document.addEventListener('game-language-change',()=>{

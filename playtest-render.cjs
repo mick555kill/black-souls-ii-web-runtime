@@ -17,6 +17,7 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
       v.setInt16(20+2*(x+w*(y+h*z)),cell(x,y,z),true);
     return bytes;
   }
+  const cooperate=()=>requireGpu?Promise.resolve():new Promise(r=>setTimeout(r,0));
   const map=table(64,27,4,(x,y,z)=>{
     if(z===3)return (x+y)%5===1?9:0;
     if(z===2)return (2*x+y)%9===0?9:0;
@@ -54,6 +55,7 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
   const next=fixture(VX.RGSS3Display),prev=ReferenceDisplay?fixture(ReferenceDisplay):null;
   const hardware=fixture(VX.RGSS3Display),output=cx(544,416),pixels=cx(544,416);
   const gpu=hardware.enableGpu(output,{allowSoftware:true});
+  console.log('Canvas fixture ready, WebGL active:',gpu);
   assert(gpu||!requireGpu,'WebGL test backend unavailable');
   const pair=[next,...(prev?[prev]:[]),...(gpu?[hardware]:[])];
   let comparisons=0,gpuComparisons=0;
@@ -84,9 +86,10 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
   step('first frame',0,0,0);
   assert(next.render()===false,'idle frame repainted');
   for(const [x,y,f] of [[-17,-11,0],[31,7,0],[248,31,1],[255,36,2],[256,45,3],[289,254,4],[289,255,5],[289,256,6],[1504,450,10],[2019,852,11],[1900,799,0],[25,0,7]]){
-    step('scroll '+[x,y,f],x,y,f);
+    step('scroll '+[x,y,f],x,y,f);await cooperate();
   }
-  for(let f=0;f<12;f++)step('water/waterfall '+f,2,18,f);
+  for(let f=0;f<12;f++){step('water/waterfall '+f,2,18,f);await cooperate();}
+  console.log('Scrolling and animated tile pixels matched');
   for(const d of pair){
     command(d,'viewport-rect',80,10,6,420,315);command(d,'viewport-set',80,'ox',17);
     command(d,'sprite-crop',62,1,2,12,17);set(d,62,'zoom_x',2);
@@ -100,10 +103,10 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
     set(d,62,'x',100);set(d,62,'angle',25);set(d,62,'mirror',true);
     command(d,'flash','Sprite',62,'rgba(240,80,20,.7)',3,20);
   }
-  for(let f=20;f<=24;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('flash '+f);}
+  for(let f=20;f<=24;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('flash '+f);await cooperate();}
   for(const color of ['rgba(255,127,30,.6)',null]){
     for(const d of pair)command(d,'flash','Viewport',80,color,2,30);
-    for(let f=30;f<=32;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('viewport flash '+f);}
+    for(let f=30;f<=32;f++){for(const d of pair){d.frameNumber=f;d.render();}compare('viewport flash '+f);await cooperate();}
   }
   for(const d of pair){command(d,'fade',.51);d.render();}compare('fade');
   for(const d of pair){
@@ -160,7 +163,8 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
       const count=stats.drawArrays;tile.render();assert(count===stats.drawArrays,'idle frame rerendered with GL');
     }finally{for(const key of Object.keys(stats))gl[key]=orig[key];tile.gpu.dispose();}
   }
-  function measure(Type) {
+  console.log('Window, snapshot and texture checks finished');
+  async function measure(Type) {
     const d=fixture(Type);draw(d,0,0,0);
     let count=0;
     const contexts=new Set([Object.getPrototypeOf(d.ctx),Object.getPrototypeOf(d.bitmaps.get(40).ctx)]);
@@ -179,6 +183,7 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
     // Time a warmed route with native drawImage restored, including the final raster flush.
     const times=[];
     for(let run=0;run<3;run++){
+      await cooperate();
       draw(d,0,0,0);d.ctx.getImageData(0,0,1,1);
       const start=performance.now();
       walk();d.ctx.getImageData(0,0,1,1);
@@ -187,7 +192,7 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
     times.sort((a,b)=>a-b);d.reset();
     return {frames,walkDrawsPerFrame:walkCalls/frames,staticDrawsPerFrame:staticCalls/60,walkMsPerFrame:times[1]};
   }
-  const before=ReferenceDisplay?measure(ReferenceDisplay):null,after=measure(VX.RGSS3Display);
+  const before=ReferenceDisplay?await measure(ReferenceDisplay):null,after=await measure(VX.RGSS3Display);
   assert(after.walkDrawsPerFrame<80,'walking draw count regressed');
   assert(after.staticDrawsPerFrame===0,'static scene draws every frame');
   return {pixelComparisons:comparisons,gpuComparisons,before,after};
@@ -263,12 +268,13 @@ try{
   const url=require('node:url').pathToFileURL(page).href;
   let result;
   if(process.env.BROWSER_ENGINE==='webkit'){
-    const {webkit}=require('playwright'),browser=await webkit.launch();
+    const {webkit}=require('playwright'),browser=await webkit.launch({headless:!process.env.DISPLAY});
     try{
       const context=await browser.newContext({isMobile:true,hasTouch:true,viewport:{width:1024,height:768},deviceScaleFactor:2});
       const tab=await context.newPage();
-      tab.on('pageerror',err=>console.error(err));
-      await tab.goto(url);await tab.waitForFunction(()=>document.getElementById('result')?.textContent!=='pending');
+      tab.on('pageerror',err=>console.error(err));tab.on('console',msg=>console.log(msg.text()));
+      await tab.goto(url,{waitUntil:'commit'});
+      await tab.waitForFunction(()=>{const el=document.getElementById('result');return el&&el.textContent!=='pending';},null,{polling:200,timeout:90000});
       result=JSON.parse(await tab.locator('#result').textContent());
       if(result.ok)result.player=await checkPlayer(context);
     }finally{await browser.close();}
