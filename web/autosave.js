@@ -96,9 +96,39 @@ loadFiles.$first_savefile_index=function(){
  if(!this.hasAutosaveRow)return latest;
  return autosaveRecord.time>=dm.$savefile_time_stamp(latest).$to_f()*1000?0:latest+1;
 };
+// The original RGSS handlers expect synchronous IO. Adapt the scene instead
+// of returning a Promise as a truthy value to the original game script.
+function saveIOStatus(message){const notice=document.getElementById('autosave-status');notice.textContent=message;notice.hidden=!message;}
+const fileScene=Opal.Scene_File.$prototype;
+const fileSelection=fileScene.$update_savefile_selection;
+fileScene.$update_savefile_selection=function(){if(!this.browserSaveIO)return fileSelection.call(this);return Opal.nil;};
+function runSaveIO(scene,message,action,success){
+ if(scene.browserSaveIO)return Opal.nil;
+ scene.browserSaveIO=true;saveIOStatus(message);
+ Promise.resolve().then(action).then(()=>{
+  if(Opal.SceneManager.$scene()!==scene)return;
+  success();saveIOStatus('');
+ }).catch(error=>{
+  console.warn('Save IO:',error);saveIOStatus('เซฟ/โหลดไม่สำเร็จ: '+String(error.message||error));Opal.Sound.$play_buzzer();
+ }).finally(()=>{scene.browserSaveIO=false;});
+ return Opal.nil;
+}
+Opal.Scene_Save.$prototype.$on_savefile_ok=function(){
+ const i=this.index;
+ return runSaveIO(this,'กำลังบันทึกเซฟ…',async()=>{
+  const record=makeSaveRecord();await writeManualSlot(i,record);dm.last_savefile_index=i;
+ },()=>this.$on_save_success());
+};
 loadFiles.$on_savefile_ok=function(){
- if(dm.$load_game(this.savefile_windows[this.index].file_index))return this.$on_load_success();
- return Opal.Sound.$play_buzzer();
+ const i=this.savefile_windows[this.index].file_index;
+ return runSaveIO(this,'กำลังโหลดเซฟ…',async()=>{
+  const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ไม่มีเซฟ');
+  const contents=unpackSave(record.body),map=contents['$[]']('map');
+  if(Number.isInteger(map?.map_id)&&map.map_id>0)await loadRequiredMap(map.map_id);
+  if(Opal.SceneManager.$scene()!==this)throw Error('Load cancelled');
+  dm.$extract_save_contents(contents);dm.$reload_map_if_updated();
+  if(i!==AUTOSAVE_SLOT)dm.last_savefile_index=i;
+ },()=>this.$on_load_success());
 };
 const saveWindow=Opal.Window_SaveFile.$$prototype;
 const refreshFile=saveWindow.$refresh;
