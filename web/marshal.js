@@ -66,13 +66,13 @@
             if(tag==='}')map.fallback=this.value(depth+1);
             return map;
           }
-          const map=this.record(Object.create(null));const n=this.size();
+          const map=this.record({});const n=this.size();
           for(let i=0;i<n;i++)map[String(this.value(depth+1))]=this.value(depth+1);
           if(tag==='}')map.__default=this.value(depth+1);
           return map;
         }
         case 'o':{
-          const obj=Object.assign(Object.create(null),{__class:this.symbol()});this.record(obj);
+          const obj=Object.assign(this.saveMode?Object.create(null):{},{__class:this.symbol()});this.record(obj);
           const n=this.size(100000);
           for(let i=0;i<n;i++){
             const key=String(this.symbol()).replace(/^@/,'');
@@ -92,6 +92,7 @@
         }
         case 'U':{const cls=this.symbol(),obj={__class:cls};this.record(obj);obj.__data=this.value(depth+1);return obj;}
         case 'S':{
+          if(this.saveMode)throw Error('Unsupported native Ruby Struct');
           const obj={__class:this.symbol()};this.record(obj);const n=this.size(100000);
           for(let i=0;i<n;i++)obj[String(this.symbol())]=this.value(depth+1);
           return obj;
@@ -106,7 +107,7 @@
         case 'c':case 'm':{const name=decode(this.stringBytes());return this.record(this.saveMode?{__saveConstant:name}:name);}
         case 'e':{if(this.saveMode)throw Error('Unsupported extended Ruby save object');this.symbol();return this.value(depth+1);}
         case 'C':{if(this.saveMode)throw Error('Unsupported Ruby save subclass');const cls=this.symbol(),obj=this.value(depth+1);if(obj&&typeof obj==='object')obj.__class=cls;return obj;}
-        case '/':{const str=decode(this.stringBytes());this.byte();return this.record(str);}
+        case '/':{if(this.saveMode)throw Error('Unsupported native Ruby Regexp');const str=decode(this.stringBytes());this.byte();return this.record(str);}
         default:throw Error(`Unsupported Ruby Marshal tag '${tag}' (0x${tag.charCodeAt(0).toString(16)}) at ${this.pos-1}`);
       }
     }
