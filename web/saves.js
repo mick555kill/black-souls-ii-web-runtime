@@ -55,9 +55,57 @@ const saveKey=i=>'bs2.rgss.save.v1.'+i;
 const dm=Opal.DataManager;
 const AUTOSAVE_SLOT=-1;
 let autosaveRecord=null;
+// Manual saves use a separate IndexedDB database. Only headers are retained in
+// RAM; load the large body on demand. Keep existing localStorage saves readable.
+const manualHeaders=new Map();
+let manualDB=null;
+function manualTransaction(stores,mode,work){
+ return new Promise((resolve,reject)=>{
+  const tx=manualDB.transaction(stores,mode);
+  let result;tx.oncomplete=()=>resolve(result);
+  tx.onabort=()=>reject(tx.error||Error('Save storage transaction aborted'));
+  try{work(tx,value=>{result=value;});}catch(error){try{tx.abort();}catch{}reject(error);}
+ });
+}
+async function prepareManualSaves(){
+ if(!globalThis.indexedDB)return;
+ try{
+  manualDB=await new Promise((resolve,reject)=>{
+   const req=indexedDB.open('bs2.rgss.manual-saves',1);
+   req.onupgradeneeded=()=>{req.result.createObjectStore('headers');req.result.createObjectStore('records');};
+   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+   req.onblocked=()=>{req.onsuccess=()=>req.result.close();reject(Error('Save database busy'));};
+  });
+  manualDB.onversionchange=()=>{manualDB.close();manualDB=null;};
+  await manualTransaction(['headers'],'readonly',(tx,set)=>{
+   const req=tx.objectStore('headers').openCursor();
+   req.onsuccess=()=>{const c=req.result;if(c){manualHeaders.set(c.key,c.value);c.continue();}};
+  });
+ }catch(error){manualDB?.close();manualDB=null;console.warn('Manual save database:',error);}
+}
+function legacySlot(i){const raw=localStorage.getItem(saveKey(i));return raw?JSON.parse(raw):null;}
+async function readFullSlot(i){
+ if(i===AUTOSAVE_SLOT)return autosaveRecord;
+ if(!manualHeaders.has(i))return legacySlot(i);
+ if(!manualDB)throw Error('Save database unavailable; reopen the game');
+ const record=await manualTransaction(['records'],'readonly',(tx,set)=>{const req=tx.objectStore('records').get(i);req.onsuccess=()=>set(req.result);});
+ if(!record)throw Error('Save body missing');
+ return record;
+}
+async function writeManualSlot(i,record){
+ if(!manualDB){localStorage.setItem(saveKey(i),JSON.stringify(record));return;}
+ const header={time:record.time,header:record.header};
+ await manualTransaction(['headers','records'],'readwrite',tx=>{
+  tx.objectStore('headers').put(header,i);tx.objectStore('records').put(record,i);
+ });
+ manualHeaders.set(i,header);
+ // Remove the legacy copy only after the new transaction commits successfully.
+ try{localStorage.removeItem(saveKey(i));}catch{}
+}
+
 function readSlot(i){
  if(i===AUTOSAVE_SLOT)return autosaveRecord;
- const raw=localStorage.getItem(saveKey(i));return raw?JSON.parse(raw):null;
+ return manualHeaders.get(i)||legacySlot(i);
 }
 function makeSaveRecord(automatic=false){
  const system=Opal.gvars.game_system,count=system.save_count;
@@ -74,14 +122,18 @@ dm.$save_game=function(i){
 dm.$load_game=function(i){
  try{
   const record=readSlot(i);if(!record)return false;
+  if(!record.body)throw Error('Use asynchronous load for IndexedDB saves');
   const contents=unpackSave(record.body);this.$extract_save_contents(contents);
   this.$reload_map_if_updated();if(i!==AUTOSAVE_SLOT)this.last_savefile_index=i;return true;
  }catch(e){console.warn('Load failed',e.message);return false;}
 };
 dm.$load_header=function(i){try{const r=readSlot(i);return r?unpackSave(r.header):Opal.nil;}catch{return Opal.nil;}};
-dm['$save_file_exists?']=function(){if(autosaveRecord)return true;try{for(let i=0;i<this.$savefile_max();i++)if(localStorage.getItem(saveKey(i)))return true;}catch{}return false;};
+dm['$save_file_exists?']=function(){if(autosaveRecord)return true;try{for(let i=0;i<this.$savefile_max();i++)if(readSlot(i))return true;}catch{}return false;};
 dm.$savefile_time_stamp=function(i){try{return Opal.Time.$at((readSlot(i)?.time||0)/1000);}catch{return Opal.Time.$at(0);}};
-dm.$delete_save_file=i=>localStorage.removeItem(saveKey(i));
+dm.$delete_save_file=i=>{
+ if(manualHeaders.has(i))return false; // never silently delete durable saves via a synchronous legacy call
+ localStorage.removeItem(saveKey(i));return true;
+};
 // The game's ATB and equipment scripts use a Marshal round trip for deep copies.
 const gameMarshal=Opal.module(Opal.Object,'Marshal');
 Opal.defs(gameMarshal,'$dump',value=>JSON.stringify(packSave(value)));
