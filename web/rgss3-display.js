@@ -158,13 +158,7 @@
       }
       if(this.gpu)return true;
       try{
-        const gl=output.getContext('webgl',{alpha:true,antialias:false,depth:false,stencil:false,
-          premultipliedAlpha:true,preserveDrawingBuffer:false,powerPreference:'high-performance',failIfMajorPerformanceCaveat:!options.allowSoftware});
-        if(!gl || gl.isContextLost())throw Error('เบราว์เซอร์ไม่เปิด WebGL ที่เร่งด้วยฮาร์ดแวร์');
-        const ext=gl.getExtension('WEBGL_debug_renderer_info');
-        const device=String(gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER));
-        const software=/swiftshader|llvmpipe|softpipe|software rasterizer|basic render driver|lavapipe/i.test(device);
-        if(software&&!options.allowSoftware)throw Error('เบราว์เซอร์ให้ใช้ได้เฉพาะตัววาดแบบซอฟต์แวร์');
+        const {gl,device,software}=root.VX.screenContext(output,true,options.allowSoftware);
         this.gpu=new root.VX.GpuRenderer(output,this,gl);
         this.gpuMode=software?'WebGL · ซอฟต์แวร์':'WebGL';this.gpuDevice=device;
         this.repaint=true;this.rendererChanged?.();return true;

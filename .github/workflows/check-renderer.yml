@@ -4,6 +4,7 @@ on:
     paths:
       - 'web/rgss3-display.js'
       - 'web/gpu-renderer.js'
+      - 'web/screen-filter.js'
       - 'web/definitions.js'
       - 'game/216.js'
       - 'playtest-levels.cjs'
@@ -11,6 +12,7 @@ on:
       - 'web/autotile.js'
       - 'web/host.js'
       - 'web/player.js'
+      - 'web/pad-settings.js'
       - 'web/cheats.js'
       - 'web/crt.js'
       - 'playtest-render.cjs'

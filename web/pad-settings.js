@@ -21,6 +21,9 @@
   update(false);
   settings.addEventListener('toggle', () => {
     document.body.classList.toggle('preview-pad', settings.open);
+    if (!settings.open && document.body.classList.contains('playing') && settings.contains(document.activeElement)) {
+      document.getElementById('screen').focus({preventScroll: true});
+    }
   });
   slider.addEventListener('input', () => update(true));
   slider.addEventListener('change', () => update(true));
