@@ -101,8 +101,8 @@ function setPointer(id,key){
  syncKey(key);
 }
 onkeydown=e=>{
- const key=keys[e.key];
- if(!active || !key || cheatMenu.open || e.target.closest?.('.cheats') || e.target.closest?.('.pad-settings') || (e.key==='Enter' && e.target.closest?.('.volume')))return;
+ const key=keys[e.key],settings=e.target.closest?.('.pad-settings');
+ if(!active || !key || cheatMenu.open || e.target.closest?.('.cheats') || (settings && (settings.open || e.key==='Enter')) || (e.key==='Enter' && e.target.closest?.('.volume')))return;
  e.preventDefault();keyboard.set(e.code,key);syncKey(key);
 };
 onkeyup=e=>{

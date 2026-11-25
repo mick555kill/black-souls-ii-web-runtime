@@ -9,75 +9,26 @@
     uniform sampler2D picture;uniform bool repeatUV;
     void main(){vec4 p=texture2D(picture,repeatUV?fract(sampleUV):sampleUV);
       gl_FragColor=vec4(mix(p.rgb,color.rgb*p.a,color.a),p.a)*alpha;}`;
-  const screenVertex='attribute vec2 p;varying vec2 uv;void main(){uv=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}';
-  const screenFragment='precision mediump float;varying vec2 uv;uniform sampler2D picture;void main(){gl_FragColor=texture2D(picture,uv);}';
-  // Bounded, edge-preserving interpolation in the final GPU pass.
-  const upscaleFragment=`precision mediump float; varying vec2 uv;
-    uniform sampler2D picture; uniform vec2 size;
-    void main(){
-      vec2 p=uv*size-0.5;
-      vec2 f=fract(p);
-      vec2 q=(floor(p)+smoothstep(vec2(0.15),vec2(0.85),f)+0.5)/size;
-      gl_FragColor=texture2D(picture,q);
-    }`;
-  const levels=[1,2,4,16,32];
-  let upscale=1;
-  try{const n=Number(localStorage.getItem('bs2.upscale'));if(levels.includes(n))upscale=n;}catch{}
-  const label=document.createElement('label');
-  label.textContent='Image Upscale ';
-  const select=document.createElement('select');
-  select.setAttribute('aria-label','Image Upscale');
-  for(const n of levels){const o=document.createElement('option');o.value=n;o.textContent=n===1?'Original':n+'×';select.append(o);}
-  select.value=String(upscale);label.append(select);
-  const info=document.createElement('output');info.style.cssText='display:block;font-size:12px;color:#e8c77c';
-  document.querySelector('.slider-panel')?.append(label,info);
-  select.addEventListener('change',()=>{
-    upscale=levels.includes(Number(select.value))?Number(select.value):1;
-    try{localStorage.setItem('bs2.upscale',String(upscale));}catch{}
-    const gpu=globalThis.display?.gpu;
-    if(gpu){gpu.shown=-2;gpu.present();}
-    else info.textContent='Upscale requires WebGL GPU renderer';
-  });
   const clearTint=[0,0,0,0];
-  function program(gl,vertex,fragment,locations){
-    const p=gl.createProgram();
-    try{
-      for(const [type,source] of [[gl.VERTEX_SHADER,vertex],[gl.FRAGMENT_SHADER,fragment]]){
-        const shader=gl.createShader(type);
-        gl.shaderSource(shader,source);gl.compileShader(shader);
-        gl.attachShader(p,shader);gl.deleteShader(shader);
-      }
-      locations.forEach((name,i)=>gl.bindAttribLocation(p,i,name));gl.linkProgram(p);
-      if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p)||'WebGL shader link failed');
-      return p;
-    }catch(e){gl.deleteProgram(p);throw e;}
-  }
   class GpuRenderer {
     constructor(output,display,gl){
       this.output=output;this.display=display;this.gl=gl;
       this.textures=new Map();this.bytes=0;this.limit=32*1024*1024;
       this.maxSize=gl.getParameter(gl.MAX_TEXTURE_SIZE);
-      this.rasterLimit=Math.min(...gl.getParameter(gl.MAX_VIEWPORT_DIMS),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
       this.colors=new Map();this.vertices=new Float32Array(128*6*9);this.stack=[];this.depth=0;this.used=0;
       const precision=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT)?.precision?'highp':'mediump';
-      this.quads=program(gl,quadVertex.replace('varying vec2 sampleUV','varying '+precision+' vec2 sampleUV'),
+      this.quads=VX.linkGlProgram(gl,quadVertex.replace('varying vec2 sampleUV','varying '+precision+' vec2 sampleUV'),
         quadFragment.replace('varying vec2 sampleUV','varying '+precision+' vec2 sampleUV'),['pos','uv','tint','opacity']);
-      this.plain=this.screenProgram(screenFragment);this.upscaled=this.screenProgram(upscaleFragment);
+      this.presenter=new VX.ScreenFilter(gl,output);
       this.quadSize=gl.getUniformLocation(this.quads,'size');this.repeatLoc=gl.getUniformLocation(this.quads,'repeatUV');
       this.vertexBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.vertexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER,this.vertices.byteLength,gl.DYNAMIC_DRAW);
-      this.screenBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.screenBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
       this.fbo=gl.createFramebuffer();this.sceneTexture=this.newTexture(gl.NEAREST);
       this.white=this.newTexture(gl.NEAREST);
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
       gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);
-      this.width=this.height=0;this.version=-1;this.shown=-2;
-    }
-    screenProgram(fragment){
-      const gl=this.gl,p=program(gl,screenVertex,fragment,['p']);
-      return {p,size:gl.getUniformLocation(p,'size'),raster:gl.getUniformLocation(p,'raster'),mask:gl.getUniformLocation(p,'maskAmount')};
+      this.width=this.height=0;this.version=-1;
     }
     newTexture(filter){
       const gl=this.gl,t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
@@ -223,42 +174,11 @@
       gl.drawArrays(gl.TRIANGLES,0,this.used/9);this.used=0;
     }
     finish(version){this.flush();this.version=version;this.present();}
-    configure(fragment,cssW,cssH,dpr){
-      if(this.fragment===fragment && this.cssW===cssW && this.cssH===cssH && this.dpr===dpr)return;
-      if(fragment&&!this.crt)this.crt=this.screenProgram(fragment);
-      this.fragment=fragment;this.cssW=cssW;this.cssH=cssH;this.dpr=dpr;this.shown=-2;this.present();
+    configure(crt,factor,cssW,cssH,dpr){
+      if(this.presenter.configure(crt,factor,cssW,cssH,dpr))this.present();
     }
     present(){
-      if(this.version<0||this.shown===this.version)return;
-      const gl=this.gl,program=this.fragment?this.crt:upscale>1?this.upscaled:this.plain;
-      let w=this.width,h=this.height,scale=1;
-      if(this.fragment){
-        const pw=Math.max(1,Math.round(this.cssW*this.dpr)),ph=Math.max(1,Math.round(this.cssH*this.dpr));
-        scale=Math.min(1,Math.sqrt(2800000/(pw*ph)),this.rasterLimit/pw,this.rasterLimit/ph);
-        w=Math.max(1,Math.round(pw*scale));h=Math.max(1,Math.round(ph*scale));
-      }
-      if(!this.fragment && upscale>1){
-        const pw=Math.max(1,Math.min(this.width*upscale,Math.round((this.cssW||this.width)*(this.dpr||1))));
-        const ph=Math.max(1,Math.min(this.height*upscale,Math.round((this.cssH||this.height)*(this.dpr||1))));
-        scale=Math.min(1,Math.sqrt(2800000/(pw*ph)),this.rasterLimit/pw,this.rasterLimit/ph);
-        w=Math.max(1,Math.floor(pw*scale));h=Math.max(1,Math.floor(ph*scale));
-      }
-      const status=this.fragment?'CRT active (upscale paused)':upscale===1?'Original':w+' × '+h+' (display / GPU limited)';
-      if(info.textContent!==status)info.textContent=status;
-      if(this.output.width!==w)this.output.width=w;if(this.output.height!==h)this.output.height=h;
-      gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
-      gl.disable(gl.SCISSOR_TEST);gl.disable(gl.BLEND);gl.useProgram(program.p);
-      gl.bindBuffer(gl.ARRAY_BUFFER,this.screenBuffer);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
-      for(let i=1;i<4;i++)gl.disableVertexAttribArray(i);
-      gl.bindTexture(gl.TEXTURE_2D,this.sceneTexture);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,!this.fragment&&upscale>1?gl.LINEAR:gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,!this.fragment&&upscale>1?gl.LINEAR:gl.NEAREST);
-      if(!this.fragment&&upscale>1)gl.uniform2f(program.size,this.width,this.height);
-      if(this.fragment){
-        gl.uniform2f(program.size,this.width,this.height);gl.uniform2f(program.raster,w,h);
-        gl.uniform1f(program.mask,Math.max(0,Math.min(1,(w/this.width-1.4)/1.4))*Math.max(0,(scale-.8)*5));
-      }
-      gl.drawArrays(gl.TRIANGLES,0,3);this.shown=this.version;
+      if(this.version>=0)this.presenter.draw(this.sceneTexture,this.width,this.height,this.version);
     }
     snapshot(ctx){
       const gl=this.gl,w=this.width,h=this.height,bytes=new Uint8Array(w*h*4);
@@ -272,8 +192,7 @@
       if(!gl.isContextLost()){
         for(const e of this.textures.values())gl.deleteTexture(e.t);
         gl.deleteTexture(this.white);gl.deleteTexture(this.sceneTexture);gl.deleteFramebuffer(this.fbo);
-        gl.deleteBuffer(this.vertexBuffer);gl.deleteBuffer(this.screenBuffer);
-        for(const p of [this.quads,this.plain?.p,this.upscaled?.p,this.crt?.p])if(p)gl.deleteProgram(p);
+        gl.deleteBuffer(this.vertexBuffer);gl.deleteProgram(this.quads);this.presenter.dispose();
       }
       this.textures.clear();this.bytes=0;
     }

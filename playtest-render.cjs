@@ -2,6 +2,53 @@
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {execFileSync}=require('node:child_process');
 
+// Check the final display pass separately from snapshots, which stay at RGSS resolution.
+function checkUpscale(gpu) {
+  const assert=(ok,why)=>{if(!ok)throw Error(why);};
+  const gl=gpu.gl, filter=gpu.presenter, w=24, h=16;
+  const texels=new Uint8Array(w*h*4);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const bright=(y===2||x>=6&&x<=18&&y>=5&&x-6<=y-5);
+    texels.set(bright?[245,225,150,255]:[18,36,70,255],(y*w+x)*4);
+  }
+  const source=gpu.newTexture(gl.NEAREST);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,texels);
+  let version=0;
+  function sample(factor,crt){
+    filter.configure(crt,factor,43,29,1);
+    filter.draw(source,w,h,++version);
+    const ow=gl.drawingBufferWidth,oh=gl.drawingBufferHeight,bytes=new Uint8Array(ow*oh*4);
+    gl.readPixels(0,0,ow,oh,gl.RGBA,gl.UNSIGNED_BYTE,bytes);
+    return {ow,oh,bytes,red:(x,y)=>bytes[((oh-y-1)*ow+x)*4]};
+  }
+  function distinct(a,b){return a.bytes.some((c,i)=>Math.abs(c-b.bytes[i])>1);}
+  try{
+    const original=sample(1,false);
+    assert(original.ow===w && original.oh===h && original.red(1,2)===245,'native presentation or orientation');
+    const filtered=[],withCrt=[];
+    for(const factor of [2,4,16,32]){
+      const frame=sample(factor,false),combined=sample(factor,true);
+      assert(frame.ow===43&&frame.oh===29,'incorrect visible raster at '+factor);
+      assert(frame.red(2,1)===18 && frame.red(2,4)===245,'flat colour or single-pixel line changed at '+factor);
+      assert(frame.bytes.some((c,i)=>i%4===0&&c>20&&c<240),'diagonals were scaled with nearest neighbour at '+factor);
+      assert(distinct(frame,combined),'CRT missing at '+factor);
+      for(const old of filtered)assert(distinct(old,frame),'upscale grids produced identical edges at '+factor);
+      for(const old of withCrt)assert(distinct(old,combined),'CRT ignored upscale factor '+factor);
+      filtered.push(frame);withCrt.push(combined);
+    }
+    const plainCrt=sample(1,true);
+    assert(distinct(plainCrt,withCrt[3]),'upscale did not compose with CRT');
+    const back=sample(1,false);
+    assert(!distinct(back,original),'switching off changed native pixels');
+    assert(filter.programs.size===4,'unexpected shader recompilation');
+    const huge=VX.ScreenFilter.raster(640,480,32,false,7680,5760,3,2048);
+    assert(huge.w*huge.h<=2800000&&huge.w<=2048&&huge.h<=2048,'unbounded 32x allocation');
+    const twice=VX.ScreenFilter.raster(320,240,2,false,1920,1440,1,4096);
+    assert(twice.w===640&&twice.h===480,'2x exceeded selected scale');
+    return filtered.length;
+  }finally{gl.deleteTexture(source);}
+}
+
 async function checkRenderer(ReferenceDisplay,requireGpu) {
   const assert=(ok,message)=>{if(!ok)throw Error(message);};
   const samePixels=(a,b,message)=>{
@@ -195,7 +242,50 @@ async function checkRenderer(ReferenceDisplay,requireGpu) {
   const before=ReferenceDisplay?await measure(ReferenceDisplay):null,after=await measure(VX.RGSS3Display);
   assert(after.walkDrawsPerFrame<80,'walking draw count regressed');
   assert(after.staticDrawsPerFrame===0,'static scene draws every frame');
-  return {pixelComparisons:comparisons,gpuComparisons,before,after};
+  return {pixelComparisons:comparisons,gpuComparisons,upscales:gpu?checkUpscale(hardware.gpu):0,before,after};
+}
+
+async function checkFilterControls(context){
+  const tab=await context.newPage(),url=require('node:url').pathToFileURL(path.join(__dirname,'index.html')).href;
+  try{
+    await tab.goto(url);
+    const menu=tab.locator('.pad-settings summary'),level=tab.getByLabel('อัปสเกลภาพ');
+    await menu.tap();
+    if(await level.inputValue()!=='1')throw Error('First visit should use native resolution');
+    await level.selectOption('32');await tab.reload();
+    if(await level.inputValue()!=='32')throw Error('Upscale preference did not survive reload');
+    await tab.evaluate(()=>{
+      // Exercise the public Canvas fallback on devices without any WebGL context.
+      const output=document.getElementById('crt-screen');
+      const native=output.getContext.bind(output);
+      output.getContext=(kind,...options)=>kind==='webgl'?null:native(kind,...options);
+      display.enabled=true;
+      display.ctx.fillStyle='#00bb88';display.ctx.fillRect(0,0,display.canvas.width,display.canvas.height);
+      display.presentationVersion++;
+      crt.apply();
+    });
+    const fallback=await tab.evaluate(()=>{
+      const scaled=document.getElementById('scale-screen'),c=scaled.getContext('2d');
+      const rgba=Array.from(c.getImageData(1,1,1,1).data);
+      if(scaled.hidden||rgba.join(',')!=='0,187,136,255')throw Error('Canvas upscale did not display the source');
+      const position=crt.sourcePoint(.23,.76);
+      if(position[0]!==.23||position[1]!==.76)throw Error('Upscaling moved the touch coordinates');
+      let paints=0;const draw=c.drawImage;c.drawImage=function(...args){paints++;return draw.apply(this,args);};
+      try{crt.draw();crt.draw();}finally{c.drawImage=draw;}
+      if(paints)throw Error('Idle Canvas fallback kept painting');
+      const status=document.getElementById('filter-status');
+      return !status.hidden && status.textContent.includes(scaled.width+' × '+scaled.height) && status.textContent.includes('Canvas 2D');
+    });
+    if(!fallback)throw Error('Canvas fallback mode missing');
+    if(!await level.isVisible())await menu.tap();
+    await level.selectOption('1');
+    if(!await tab.locator('#scale-screen').isHidden())throw Error('Native presentation was not restored');
+    await tab.evaluate(()=>localStorage.setItem('bs2.upscale','3'));
+    await tab.reload();
+    if(await level.inputValue()!=='1')throw Error('Unknown scale should restore native size');
+    await tab.evaluate(()=>localStorage.removeItem('bs2.upscale'));
+    return {persisted:true,canvasFallback:true,idleSkipped:true};
+  }finally{await tab.close();}
 }
 
 // Exercise the actual page controls and frame loop with a minimal scene and
@@ -230,6 +320,13 @@ async function checkPlayer(context){
       get saves(){return saves;}
     };
   });
+  const immediate=await tab.evaluate(()=>{
+    const summary=document.querySelector('.pad-settings summary');summary.focus();
+    const press=type=>summary.dispatchEvent(new KeyboardEvent(type,{key:'ArrowRight',code:'ArrowRight',bubbles:true,cancelable:true}));
+    press('keydown');const down=heldKeys.has('right');press('keyup');
+    return down&&!heldKeys.has('right');
+  });
+  if(!immediate)throw Error('Closing settings swallowed the next movement key');
   await tab.locator('.actions [data-key=ok]').tap();
   const tap=await tab.evaluate(()=>{checkLoop.pulse(20);const first=hostMethods.inputTrigger('C');checkLoop.pulse(40);return first&&!hostMethods.inputPress('C');});
   if(!tap)throw Error('Touch confirmation did not trigger and release');
@@ -257,8 +354,8 @@ try{
   const reference=process.argv[2];
   const old=reference?execFileSync('git',['show',reference+':web/rgss3-display.js'],{cwd:__dirname,encoding:'utf8'}):'';
   const scripts=[read('web/marshal.js'),read('web/autotile.js'),old,
-    'const reference=window.VX.RGSS3Display;',read('web/gpu-renderer.js'),read('web/rgss3-display.js'),
-    '('+checkRenderer.toString()+')(reference,'+(process.env.BROWSER_ENGINE!=='webkit')+').then(value=>finish({ok:true,...value}),err=>finish({ok:false,error:String(err.stack||err)}));'];
+    'const reference=window.VX.RGSS3Display;',read('web/screen-filter.js'),read('web/gpu-renderer.js'),read('web/rgss3-display.js'),
+    checkUpscale.toString(), '('+checkRenderer.toString()+')(reference,'+(process.env.BROWSER_ENGINE!=='webkit')+').then(value=>finish({ok:true,...value}),err=>finish({ok:false,error:String(err.stack||err)}));'];
   const source=scripts.map((code,i)=>{
     fs.writeFileSync(path.join(dir,'test-'+i+'.js'),code);
     return '<script src="test-'+i+'.js"></script>';
@@ -276,7 +373,7 @@ try{
       await tab.goto(url,{waitUntil:'commit'});
       await tab.waitForFunction(()=>{const el=document.getElementById('result');return el&&el.textContent!=='pending';},null,{polling:200,timeout:90000});
       result=JSON.parse(await tab.locator('#result').textContent());
-      if(result.ok)result.player=await checkPlayer(context);
+      if(result.ok){result.filters=await checkFilterControls(context);result.player=await checkPlayer(context);}
     }finally{await browser.close();}
   }else{
     const chrome=process.env.CHROME_BIN||'google-chrome';
