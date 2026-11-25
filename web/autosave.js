@@ -98,8 +98,8 @@ loadFiles.$first_savefile_index=function(){
 };
 // The original RGSS handlers expect synchronous IO. Adapt the scene instead
 // of returning a Promise as a truthy value to the original game script.
-function saveIOStatus(message){const notice=document.getElementById('autosave-status');notice.textContent=message;notice.hidden=!message;}
-const fileScene=Opal.Scene_File.$prototype;
+function saveIOStatus(message){const notice=document.getElementById('travel-status')||document.getElementById('autosave-status');notice.textContent=message;notice.hidden=!message;}
+const fileScene=Opal.Scene_File.$$prototype;
 const fileSelection=fileScene.$update_savefile_selection;
 fileScene.$update_savefile_selection=function(){if(!this.browserSaveIO)return fileSelection.call(this);return Opal.nil;};
 function runSaveIO(scene,message,action,success){
@@ -113,18 +113,22 @@ function runSaveIO(scene,message,action,success){
  }).finally(()=>{scene.browserSaveIO=false;});
  return Opal.nil;
 }
-Opal.Scene_Save.$prototype.$on_savefile_ok=function(){
+Opal.Scene_Save.$$prototype.$on_savefile_ok=function(){
  const i=this.index;
  return runSaveIO(this,'กำลังบันทึกเซฟ…',async()=>{
   const record=makeSaveRecord();await writeManualSlot(i,record);dm.last_savefile_index=i;
  },()=>this.$on_save_success());
 };
 loadFiles.$on_savefile_ok=function(){
- const i=this.savefile_windows[this.index].file_index;
+ const i=this.savefile_windows[this.index]?.file_index;
+ if(!Number.isInteger(i)){saveIOStatus('ไม่พบช่องเซฟที่เลือก');return Opal.Sound.$play_buzzer();}
  return runSaveIO(this,'กำลังโหลดเซฟ…',async()=>{
   const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ไม่มีเซฟ');
+  saveIOStatus('กำลังกู้ข้อมูลตัวละครและแผนที่…');
   const contents=unpackSave(record.body),map=contents['$[]']('map');
-  if(Number.isInteger(map?.map_id)&&map.map_id>0)await loadRequiredMap(map.map_id);
+  if(!Number.isInteger(map?.map_id)||map.map_id<=0)throw Error('Invalid saved map ID');
+  saveIOStatus('กำลังโหลดแผนที่ '+map.map_id+'…');
+  await loadRequiredMap(map.map_id);
   if(Opal.SceneManager.$scene()!==this)throw Error('Load cancelled');
   dm.$extract_save_contents(contents);dm.$reload_map_if_updated();
   if(i!==AUTOSAVE_SLOT)dm.last_savefile_index=i;
