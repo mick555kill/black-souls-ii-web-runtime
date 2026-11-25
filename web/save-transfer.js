@@ -63,7 +63,7 @@
   download.disabled=upload.disabled=busy;
  }
  function validSlot(i){return Number.isInteger(i)&&(i===AUTOSAVE_SLOT||i>=0&&i<dm.$savefile_max());}
- panel.addEventListener('toggle',()=>{if(panel.open){pauseTick();releaseControls();refresh();tell(active?'เลือกช่องเซฟ · นำเข้าได้ที่หน้าเมนูหลัก':'เลือกโฟลเดอร์เกมก่อน');}else{if(active){document.getElementById('screen').focus();scheduleTick();}}});
+ panel.addEventListener('toggle',()=>{if(panel.open){pauseTick();releaseControls();refresh();tell(active?'เลือกช่องเซฟ · รองรับ .rvdata2 และ .bs2save.json ที่หน้าเมนูหลัก':'เลือกโฟลเดอร์เกมก่อน');}else{if(active){document.getElementById('screen').focus();scheduleTick();}}});
  download.onclick=()=>{
   try{
    const i=slot();if(!active||!validSlot(i))throw Error('เลือกช่องเซฟก่อน');
@@ -82,9 +82,15 @@
   try{
    if(!isTitle()||!validSlot(i))throw Error('นำเข้าได้เฉพาะหน้าเมนูหลัก');
    if(selected.size>maxFile)throw Error('ไฟล์เกิน 32 MB');
-   const payload=JSON.parse(await selected.text());
-   if(payload?.format!==format||payload.version!==version)throw Error('ไม่ใช่ไฟล์เซฟของ Web Runtime รุ่นที่รองรับ');
-   const record=validateRecord(payload.record);
+   let record;
+   if(/\.rvdata2$/i.test(selected.name)){
+    tell('กำลังแปลงเซฟ RPG Maker VX Ace…');
+    record=validateRecord(VX.parseNativeSave(new Uint8Array(await selected.arrayBuffer()),selected.lastModified||Date.now()));
+   }else{
+    const payload=JSON.parse(await selected.text());
+    if(payload?.format!==format||payload.version!==version)throw Error('ไม่ใช่ไฟล์เซฟของ Web Runtime รุ่นที่รองรับ');
+    record=validateRecord(payload.record);
+   }
    if(!isTitle())throw Error('กลับไปหน้าเมนูหลักก่อนนำเข้า');
    if(readSlot(i)&&!window.confirm('แทนที่ '+label(i)+' ด้วยไฟล์ที่เลือกหรือไม่?')){tell('ยกเลิกการนำเข้า');return;}
    if(i===AUTOSAVE_SLOT){
