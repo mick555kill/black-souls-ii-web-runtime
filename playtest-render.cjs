@@ -320,6 +320,13 @@ async function checkPlayer(context){
       get saves(){return saves;}
     };
   });
+  const immediate=await tab.evaluate(()=>{
+    const summary=document.querySelector('.pad-settings summary');summary.focus();
+    const press=type=>summary.dispatchEvent(new KeyboardEvent(type,{key:'ArrowRight',code:'ArrowRight',bubbles:true,cancelable:true}));
+    press('keydown');const down=heldKeys.has('right');press('keyup');
+    return down&&!heldKeys.has('right');
+  });
+  if(!immediate)throw Error('Closing settings swallowed the next movement key');
   await tab.locator('.actions [data-key=ok]').tap();
   const tap=await tab.evaluate(()=>{checkLoop.pulse(20);const first=hostMethods.inputTrigger('C');checkLoop.pulse(40);return first&&!hostMethods.inputPress('C');});
   if(!tap)throw Error('Touch confirmation did not trigger and release');
