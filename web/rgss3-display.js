@@ -144,6 +144,8 @@
       this.maxBitmapPixels=4096*4096;
       this.tileLayers=new WeakMap();
       this.soundCache=new Map();this.soundPending=new Map();this.soundBytes=0;
+      this.audioDecodeActive=0;this.audioDecodeQueue=[];
+      this.audioDisabled=new URLSearchParams(root.location?.search||'').get('audio')==='off';
       this.gpu=null;this.gpuMode='Canvas 2D';
       this.presentationVersion=0;this.repaint=true;this.hadFlash=false;this.lastFade=0;
     }
@@ -439,7 +441,7 @@
         if(!tiles.lastDraw?.[6])continue;
         const cache=tiles.chunks;
         if(!cache || cache.map!==tiles.map || cache.flags!==tiles.flags ||
-          tiles.ids.some((id,i)=>this.bitmaps.get(id)!==cache.sources[i] || cache.sources[i]?.version!==cache.versions[i])){
+          (tiles.ids||[]).some((id,i)=>this.bitmaps.get(id)!==cache.sources[i] || cache.sources[i]?.version!==cache.versions[i])){
           this.drawTiles(...tiles.lastDraw);
         }
       }
@@ -584,6 +586,13 @@
         if(dx[i+1]>dx[i]&&dy[j+1]>dy[j])c.drawImage(img,sx+src[i],sy+src[j],src[i+1]-src[i],src[j+1]-src[j],x+dx[i],y+dy[j],dx[i+1]-dx[i],dy[j+1]-dy[j]);
       }
     }
+    mapAssetsPending(){
+      for(const tiles of this.tilemaps.values()){
+        if(!tiles.lastDraw?.[6])continue;
+        if(tiles.ids?.some(id=>{const b=this.bitmaps.get(id);return b&&!b.ready;}))return true;
+      }
+      return false;
+    }
     drawTiles(id,lowId,highId,ox,oy,frame,visible,sheetIds){
       const tiles=this.tilemaps.get(id);
       if(!tiles)return;
@@ -594,6 +603,8 @@
         tiles.sheetIds=sheetIds;tiles.ids=sheetIds.split(',').map(Number);
       }
       const sources=tiles.ids.map(sheet=>this.bitmaps.get(sheet));
+      // Never compose a partial tileset while the file-backed sheets are still decoding.
+      if(sources.some(b=>b&&!b.ready))return;
       if(!tiles.chunks?.matches(tiles,sources)){
         tiles.chunks?.dispose();tiles.chunks=new TileChunks(this,tiles,sources);
       }
@@ -630,7 +641,7 @@
       if(this.soundPending.has(key))return this.soundPending.get(key);
       const pending=this.decodeAudio(file,src,ctx).then(buffer=>{
         if(this.soundPending.get(key)!==pending)return buffer;
-        const bytes=buffer.length*buffer.numberOfChannels*4,limit=8*1024*1024;
+        const bytes=buffer.length*buffer.numberOfChannels*4,limit=24*1024*1024;
         if(bytes<=limit){
           while(this.soundCache.size && (this.soundBytes+bytes>limit || this.soundCache.size>=40)){
             const [old,entry]=this.soundCache.entries().next().value;this.soundCache.delete(old);this.soundBytes-=entry.bytes;
@@ -642,9 +653,15 @@
       this.soundPending.set(key,pending);return pending;
     }
     async decodeAudio(file,src,ctx){
-      const bytes=await src.read(file,64*1024*1024);
-      const owned=bytes.byteOffset===0 && bytes.byteLength===bytes.buffer.byteLength;
-      return ctx.decodeAudioData(owned?bytes.buffer:bytes.slice().buffer);
+      if(this.audioDecodeActive>=2)await new Promise(resolve=>this.audioDecodeQueue.push(resolve));
+      else this.audioDecodeActive++;
+      try{
+        const bytes=await src.read(file,64*1024*1024);
+        const owned=bytes.byteOffset===0 && bytes.byteLength===bytes.buffer.byteLength;
+        return await ctx.decodeAudioData(owned?bytes.buffer:bytes.slice().buffer);
+      }finally{
+        const next=this.audioDecodeQueue.shift();if(next)next();else this.audioDecodeActive--;
+      }
     }
     async audio(kind,action,name,volume=100,pitch=100,position=0){
       const slot=String(kind).toLowerCase();
@@ -652,12 +669,14 @@
       if(action!=='play' || slot!=='se')this.audioGeneration.set(slot,++generation);
       if(action!=='play'){this.stopChannel(slot,action==='fade'?volume:0);return;}
       const src=this.getProject()?.source, ctx=this.audioContext;
-      if(!src || !ctx || !name)return;
+      if(this.audioDisabled || !src || !ctx || !name)return;
       const base=String(name).replace(/\\/g,'/').replace(/^Audio\/(BGM|BGS|ME|SE)\//i,'');
       const file=[base,...['ogg','m4a','mp3','wav'].map(ext=>base+'.'+ext)]
         .map(n=>'Audio/'+slot.toUpperCase()+'/'+n).find(key=>src.has(key));
       if(!file)return;
-      const buffer=await (slot==='se'?this.soundEffect(file,src,ctx):this.decodeAudio(file,src,ctx));
+      // Do not enqueue an unlimited number of short effects behind scene music.
+      if(slot==='se'&&!this.soundPending.has(file.toLowerCase())&&!this.soundCache.has(file.toLowerCase())&&this.soundPending.size>=8)return;
+      const buffer=await this.soundEffect(file,src,ctx);
       if(generation!==(this.audioGeneration.get(slot)||0))return;
       if(slot!=='se')this.stopChannel(slot);
       const node=ctx.createBufferSource(),gain=ctx.createGain();
@@ -666,7 +685,9 @@
       gain.gain.value=Math.max(0,Math.min(1,volume/100));
       node.connect(gain);gain.connect(this.masterGain);
       const voices=this.channels.get(slot)||new Set(),voice={node,gain};
-      this.channels.set(slot,voices);voices.add(voice);
+      this.channels.set(slot,voices);
+      if(slot==='se'&&voices.size>=12){const old=voices.values().next().value;voices.delete(old);try{old.node.stop();}catch{}}
+      voices.add(voice);
       node.onended=()=>{voices.delete(voice);node.disconnect();gain.disconnect();};
       const offset=Math.max(0,position/1000);
       node.start(0,node.loop?offset%buffer.duration:Math.min(offset,buffer.duration));

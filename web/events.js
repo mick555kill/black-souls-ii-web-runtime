@@ -69,11 +69,12 @@ proto.$update=function(){
    case 201:{
     const coord=i=>p[0]===0?p[i]:Opal.gvars.game_variables['$[]'](p[i]);
     const id=coord(1), x=coord(2), y=coord(3), player=Opal.gvars.game_player;
-    let ready=false,started=false,error;
-    loadMapData(id).then(()=>ready=true,e=>error=e);
+    let ready=false,started=false,error,assets;
+    prepareMapTransfer(id).then(images=>{assets=images;ready=true;},e=>error=e);
     this.pending=()=>{if(error)throw error;if(!ready)return false;
      if(!started){started=true;Opal.gvars.game_temp['$fade_type='](p[5]);player.$reserve_transfer(id,x,y,p[4]);}
-     return !player['$transfer?']();};break;
+     if(player['$transfer?']())return false;
+     assets=null;return true;};break;
    }
    case 204:{
     const map=Opal.gvars.game_map;

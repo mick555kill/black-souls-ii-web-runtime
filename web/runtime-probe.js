@@ -69,7 +69,8 @@
     'Bitmap handles: '+d.bitmaps.size+' | surfaces: '+surfaces.size+' | estimated RGBA: '+mb(bitmapBytes)+' MiB',
     'Sprites: '+d.sprites.size+' | GPU textures: '+(d.gpu?.textures.size||0)+' / '+mb(d.gpu?.bytes||0)+' MiB | audio voices: '+voices,
     'Last map data load: '+stats.mapMs.toFixed(1)+' ms | map loads: '+stats.mapLoads,
-    'Audio cache: '+mb(d.soundBytes)+' MiB | pending audio: '+d.soundPending.size,
+    'Last destination preload: '+(stats.mapAssetsMs??0).toFixed(1)+' ms | images: '+(stats.mapAssetsCount??0)+' | tile wait: '+d.mapAssetsPending(),
+    'Audio cache: '+mb(d.soundBytes)+' MiB | pending audio: '+d.soundPending.size+' | active decode: '+d.audioDecodeActive+' | queued: '+d.audioDecodeQueue.length,
     'Sample '+seconds.toFixed(1)+'s (nested timings overlap; async includes waiting):'
    ];
    for(const [name,v] of [...counts.entries()].sort((a,b)=>b[1].ms-a[1].ms)){
