@@ -168,7 +168,7 @@ el('folder').onchange=async e=>{
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
-  project=new VX.Project(source,{retainImages:true});await Promise.all([prepareDatabase(project),autosave.prepare(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
+  project=new VX.Project(source,{retainImages:true});await Promise.all([prepareDatabase(project),autosave.prepare(),prepareManualSaves(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
   display.enabled=true;
   if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('เลือกผ่านลิงก์');
