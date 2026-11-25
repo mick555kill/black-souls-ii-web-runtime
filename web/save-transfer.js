@@ -64,10 +64,10 @@
  }
  function validSlot(i){return Number.isInteger(i)&&(i===AUTOSAVE_SLOT||i>=0&&i<dm.$savefile_max());}
  panel.addEventListener('toggle',()=>{if(panel.open){pauseTick();releaseControls();refresh();tell(active?'เลือกช่องเซฟ · รองรับ .rvdata2 และ .bs2save.json ที่หน้าเมนูหลัก':'เลือกโฟลเดอร์เกมก่อน');}else{if(active){document.getElementById('screen').focus();scheduleTick();}}});
- download.onclick=()=>{
+ download.onclick=async()=>{
   try{
    const i=slot();if(!active||!validSlot(i))throw Error('เลือกช่องเซฟก่อน');
-   const record=readSlot(i);if(!record)throw Error('ช่องนี้ยังไม่มีเซฟ');
+   const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ยังไม่มีเซฟ');
    const blob=new Blob([JSON.stringify({format,version,slot:i,record})],{type:'application/json'});
    const url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download='BlackSoulsII-'+(i===AUTOSAVE_SLOT?'autosave':'file-'+(i+1))+'-'+new Date(record.time).toISOString().slice(0,10)+'.bs2save.json';
@@ -96,7 +96,7 @@
    if(i===AUTOSAVE_SLOT){
     if(autosave.writing)throw Error('Autosave กำลังทำงาน ลองอีกครั้ง');
     await autosave.persist(record);autosaveRecord=record;
-   }else localStorage.setItem(saveKey(i),JSON.stringify(record));
+   }else await writeManualSlot(i,record);
    const win=Opal.SceneManager.$scene()?.command_window;
    if(typeof win?.$refresh==='function')win.$refresh();
    tell('นำเข้า '+label(i)+' สำเร็จ · ปิดเมนูเซฟแล้วเลือก Continue');
