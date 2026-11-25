@@ -24,9 +24,9 @@
     }
   }
   class MarshalReader {
-    constructor(buffer, {rawStrings = false} = {}) {
+    constructor(buffer, {rawStrings = false, saveMode = false} = {}) {
       this.bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-      this.pos = 0; this.objects=[]; this.symbols=[]; this.count=0; this.rawStrings=rawStrings;
+      this.pos = 0; this.objects=[]; this.symbols=[]; this.count=0; this.rawStrings=rawStrings;this.saveMode=saveMode;
     }
     read(n) {
       if(!Number.isSafeInteger(n)||n<0||this.pos+n>this.bytes.length) throw Error('Truncated Ruby Marshal stream');
@@ -60,22 +60,30 @@
         case '"':{const bytes=this.stringBytes();return this.record(this.rawStrings?bytes:decode(bytes));}
         case '[':{const a=this.record([]),n=this.size();for(let i=0;i<n;i++)a.push(this.value(depth+1));return a;}
         case '{':case '}':{
-          const map=this.record({});const n=this.size();
+          if(this.saveMode){
+            const map=this.record({__saveHash:true,entries:[],fallback:null}),n=this.size();
+            for(let i=0;i<n;i++)map.entries.push([this.value(depth+1),this.value(depth+1)]);
+            if(tag==='}')map.fallback=this.value(depth+1);
+            return map;
+          }
+          const map=this.record(Object.create(null));const n=this.size();
           for(let i=0;i<n;i++)map[String(this.value(depth+1))]=this.value(depth+1);
           if(tag==='}')map.__default=this.value(depth+1);
           return map;
         }
         case 'o':{
-          const obj={__class:this.symbol()};this.record(obj);
+          const obj=Object.assign(Object.create(null),{__class:this.symbol()});this.record(obj);
           const n=this.size(100000);
           for(let i=0;i<n;i++){
-            const key=this.symbol();obj[String(key).replace(/^@/,'')]=this.value(depth+1);
+            const key=String(this.symbol()).replace(/^@/,'');
+            if(this.saveMode&&(!key||key.startsWith('$')||['__proto__','constructor','prototype','__class','__raw','__data','__saveHash','__saveConstant'].includes(key)))throw Error('Unsupported save field: '+key);
+            obj[key]=this.value(depth+1);
           }
           return obj;
         }
         case 'I':{
           const obj=this.value(depth+1),n=this.size(100000);
-          for(let i=0;i<n;i++){const key=this.symbol(),val=this.value(depth+1);if(obj&&typeof obj==='object')obj[String(key).replace(/^@/,'')]=val;}
+          for(let i=0;i<n;i++){const key=this.symbol(),val=this.value(depth+1);if(!this.saveMode&&obj&&typeof obj==='object')obj[String(key).replace(/^@/,'')]=val;}
           return obj;
         }
         case 'u':{
@@ -95,14 +103,15 @@
           if(sign==='-')n=-n;
           return this.record(n<=BigInt(Number.MAX_SAFE_INTEGER)&&n>=BigInt(Number.MIN_SAFE_INTEGER)?Number(n):n);
         }
-        case 'c':case 'm':return this.record(decode(this.stringBytes()));
-        case 'e':{this.symbol();return this.value(depth+1);}
-        case 'C':{const cls=this.symbol(),obj=this.value(depth+1);if(obj&&typeof obj==='object')obj.__class=cls;return obj;}
+        case 'c':case 'm':{const name=decode(this.stringBytes());return this.record(this.saveMode?{__saveConstant:name}:name);}
+        case 'e':{if(this.saveMode)throw Error('Unsupported extended Ruby save object');this.symbol();return this.value(depth+1);}
+        case 'C':{if(this.saveMode)throw Error('Unsupported Ruby save subclass');const cls=this.symbol(),obj=this.value(depth+1);if(obj&&typeof obj==='object')obj.__class=cls;return obj;}
         case '/':{const str=decode(this.stringBytes());this.byte();return this.record(str);}
         default:throw Error(`Unsupported Ruby Marshal tag '${tag}' (0x${tag.charCodeAt(0).toString(16)}) at ${this.pos-1}`);
       }
     }
     parse(){
+      if(this.saveMode){this.objects=[];this.symbols=[];}
       const major=this.byte(),minor=this.byte();
       if(major!==4||minor>8)throw Error(`Unsupported Ruby Marshal version ${major}.${minor}`);
       return this.value();
