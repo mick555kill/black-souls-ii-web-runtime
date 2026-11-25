@@ -54,7 +54,12 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
   viewportDispose:id=>sendRGSS('viewport-dispose',[id]),
   spriteCrop:(...args)=>sendRGSS('sprite-crop',args),
   spriteCreate(){const id=nextGraphicsId++;sendRGSS('sprite-create',[id]);return id;},
-  spriteSet:(...args)=>sendRGSS('sprite-set',args),
+  spriteSet(id,key,value){
+    const d=globalThis.display;
+    if(d?.setSprite){
+      const sprite=d.sprites.get(id);if(sprite)d.setSprite(sprite,key,value);
+    }else sendRGSS('sprite-set',[id,key,value]);
+  },
   spriteDispose:id=>sendRGSS('sprite-dispose',[id]),
 };
 globalThis.rgssHost = Object.fromEntries(Object.entries(hostMethods).map(([k,v])=>['$'+k,v]));

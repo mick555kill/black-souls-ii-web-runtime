@@ -3,6 +3,12 @@
 
   Opal.add_stubs('!=,flatten,scan,note,!,empty?,to_i,[],each_line,size,==,push,exp_for_level,+,exp_for_level_etc_array,inject,etc_array,>=,*,-,max_level,max_level_lb,each,feature_objects,mlv_plus,param_base,>,over_level_param,param_base_lb,params,class,truncate,olextend_data_1,olextend_data_2,/,to_f,olv_extend,change_color,system_color,draw_text,line_height,level_a,normal_color,level');
   
+  // Above level 99 these modifiers run on every stat read. Decimal integer notes
+  // are already values. Other notes use the original Ruby binding on each call.
+  function integerModifier(source) {
+    if (typeof source === 'string' && /^[+-]?(?:0|[1-9][0-9]{0,8})$/.test(source)) return Number(source);
+  }
+
   (function($base, $parent_nesting) {
     var self = $module($base, 'MLV_CHANGE');
 
@@ -163,7 +169,9 @@
       var $a, self = this, data = nil;
 
       
-      data = ($a = $$$($$('MLV_CHANGE'), 'P_RATE'), typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
+      $a = $$$($$('MLV_CHANGE'), 'P_RATE');
+      const literal = integerModifier($a);
+      data = literal !== undefined ? literal : (typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
       if ($eqeq(data, 0)) {
         return 0
       };
@@ -182,7 +190,10 @@
 
         
         if (f == null) f = nil;
-        return (data = $rb_plus(data, $rb_minus(($a = f.$olv_extend(), typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["f", "data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a)), 100)));}, {$$s: self});
+        $a = f.$olv_extend();
+        const literal = integerModifier($a);
+        const modifier = literal !== undefined ? literal : (typeof Opal.compile === 'function' ? eval(Opal.compile($a, {scope_variables: ["f", "data"], arity_check: false, file: '(eval)', eval: true})) : self.$eval($a));
+        return (data = $rb_plus(data, $rb_minus(modifier, 100)));}, {$$s: self});
       if ($eqeq(data, 0)) {
         return 0
       };

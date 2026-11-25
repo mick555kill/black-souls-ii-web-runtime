@@ -10,12 +10,12 @@ const crt=(()=>{
   const measure=()=>{
     const rect=screen.getBoundingClientRect();
     cssWidth=rect.width;cssHeight=rect.height;
-    if(ready && toggle.checked)draw();
+    if(globalThis.display?.gpu || (ready && toggle.checked))draw();
   };
   if(typeof ResizeObserver==='function')new ResizeObserver(measure).observe(screen);
   window.addEventListener('resize',measure);
   function sourcePoint(u,v){
-    if(!toggle.checked||!ready)return [u,v];
+    if(!toggle.checked||(!ready && !globalThis.display?.gpu))return [u,v];
     const x=u*2-1,y=v*2-1;
     return [(1+x*(1+bend*y*y*(1-x*x)))/2,(1+y*(1+bend*x*x*(1-y*y)))/2];
   }
@@ -51,7 +51,7 @@ const crt=(()=>{
       gl_FragColor=vec4(sqrt(max(emission,vec3(0.0))),1.0);
     }`;
   function initialize(){
-    gl=output.getContext('webgl',{alpha:false,antialias:false,depth:false,stencil:false});
+    gl=output.getContext('webgl',{alpha:false,antialias:false,depth:false,stencil:false,powerPreference:'high-performance',failIfMajorPerformanceCaveat:true});
     if(!gl)throw Error('WebGL unavailable');
     const program=gl.createProgram();
     for(const [type,source] of [[gl.VERTEX_SHADER,vertex],[gl.FRAGMENT_SHADER,fragment]]){
@@ -75,6 +75,13 @@ const crt=(()=>{
     ready=true;
   }
   function draw(){
+    const gpu=globalThis.display?.gpu;
+    if(gpu){
+      output.hidden=true;
+      try{gpu.configure(toggle.checked?fragment:null,cssWidth,cssHeight,window.devicePixelRatio||1);}
+      catch(e){console.warn('CRT:',e);toggle.checked=false;gpu.configure(null,cssWidth,cssHeight,window.devicePixelRatio||1);}
+      return;
+    }
     if(!toggle.checked||!ready)return;
     const w=screen.width,h=screen.height;
     const dpr=window.devicePixelRatio||1;
@@ -96,10 +103,12 @@ const crt=(()=>{
     gl.drawArrays(gl.TRIANGLES,0,3);lastVersion=version;
   }
   function apply(){
+    if(!globalThis.display?.enabled){output.hidden=true;return;}
+    if(globalThis.display.gpu){toggle.disabled=false;toggle.title='';measure();return;}
     if(toggle.checked&&!ready){
       try{initialize();}catch(error){
         console.warn('CRT:',error);toggle.checked=false;toggle.disabled=true;
-        toggle.parentElement.append(' (WebGL ใช้งานไม่ได้)');
+        toggle.title='เบราว์เซอร์ไม่เปิด WebGL ที่เร่งด้วยฮาร์ดแวร์';
       }
     }
     output.hidden=!toggle.checked;lastVersion=null;if(toggle.checked)measure();
@@ -112,5 +121,5 @@ const crt=(()=>{
   toggle.addEventListener('change',()=>{
     apply();try{localStorage.setItem('bs2.crt',toggle.checked?'1':'0');}catch{}
   });
-  apply();return {draw,sourcePoint};
+  apply();return {draw,sourcePoint,apply};
 })();
