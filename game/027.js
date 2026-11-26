@@ -935,24 +935,16 @@
       return event;
     });
     return $def(self, '$setup_autorun_common_event', function $$setup_autorun_common_event() {
-      var self = this, event = nil;
-      if ($gvars.data_common_events == null) $gvars.data_common_events = nil;
-
-      
-      event = $send($gvars.data_common_events, 'find', [], function $$38(event){var $ret_or_1 = nil, $ret_or_2 = nil;
-        if ($gvars.game_switches == null) $gvars.game_switches = nil;
-
-        
-        if (event == null) event = nil;
-        if ($truthy(($ret_or_1 = ($truthy(($ret_or_2 = event)) ? (event['$autorun?']()) : ($ret_or_2))))) {
-          return $gvars.game_switches['$[]'](event.$switch_id())
-        } else {
-          return $ret_or_1
-        };});
-      if ($truthy(event)) {
-        self.interpreter.$setup(event.$list())
-      };
-      return event;
+      // This runs on every free map tick. Preserve database order, scripted
+      // trigger changes and the original switch checks without a Ruby block per row.
+      for (const event of $gvars.data_common_events) {
+        if (event && event !== nil && $truthy(event['$autorun?']()) &&
+            $truthy($gvars.game_switches['$[]'](event.$switch_id()))) {
+          this.interpreter.$setup(event.$list());
+          return event;
+        }
+      }
+      return nil;
     });
   })($nesting[0], null, $nesting)
 })(Opal, self);

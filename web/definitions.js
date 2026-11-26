@@ -15,6 +15,7 @@
 
       for (const key of properties) {
         Opal.defn(klass, '$' + key + '=', function(value) {
+          if (this[key] === value) return;
           this[key] = value;
           return globalThis.rgssHost[operation](this.id, key, value);
         });
@@ -478,14 +479,14 @@
       if ($truthy(width['$is_a?']($$('String')))) {
         
         $b = $$('RGSSWeb').$host().$bitmapSize(width), $a = $to_ary($b), (self.width = ($a[0] == null ? nil : $a[0])), (self.height = ($a[1] == null ? nil : $a[1])), $b;
-        self.id = $$('RGSSWeb').$host().$bitmapLoad(width).$to_i();
+        self.id = $$('RGSSWeb').$host().$bitmapLoad(width, self).$to_i();
       } else {
         
         $a = [width.$to_i(), height.$to_i()], (self.width = $a[0]), (self.height = $a[1]), $a;
         if (!($truthy($rb_gt(self.width, 0)) && ($truthy($rb_gt(self.height, 0))))) {
           self.$raise($$('ArgumentError'), "invalid bitmap size")
         };
-        self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height).$to_i();
+        self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height, self).$to_i();
       };
       self.disposed = false;
       return (self.font = $$('Font').$new());
@@ -500,7 +501,7 @@
       if ($truthy(self.disposed)) {
         return nil
       };
-      $$('RGSSWeb').$host().$bitmapDispose(self.id);
+      $$('RGSSWeb').$host().$bitmapDispose(self.id, self);
       return (self.disposed = true);
     });
     
@@ -590,7 +591,7 @@
       $$initialize_copy.$$p = null;
       
       $send2(self, $find_super(self, 'initialize_copy', $$initialize_copy, false, true), 'initialize_copy', [source], $yield);
-      self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height);
+      self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height, self);
       self.font = source.$font().$clone();
       return $$('RGSSWeb').$host().$bitmapCopy(self.id, source.$id());
     });
@@ -11002,24 +11003,16 @@
       return event;
     });
     return $def(self, '$setup_autorun_common_event', function $$setup_autorun_common_event() {
-      var self = this, event = nil;
-      if ($gvars.data_common_events == null) $gvars.data_common_events = nil;
-
-      
-      event = $send($gvars.data_common_events, 'find', [], function $$38(event){var $ret_or_1 = nil, $ret_or_2 = nil;
-        if ($gvars.game_switches == null) $gvars.game_switches = nil;
-
-        
-        if (event == null) event = nil;
-        if ($truthy(($ret_or_1 = ($truthy(($ret_or_2 = event)) ? (event['$autorun?']()) : ($ret_or_2))))) {
-          return $gvars.game_switches['$[]'](event.$switch_id())
-        } else {
-          return $ret_or_1
-        };});
-      if ($truthy(event)) {
-        self.interpreter.$setup(event.$list())
-      };
-      return event;
+      // This runs on every free map tick. Preserve database order, scripted
+      // trigger changes and the original switch checks without a Ruby block per row.
+      for (const event of $gvars.data_common_events) {
+        if (event && event !== nil && $truthy(event['$autorun?']()) &&
+            $truthy($gvars.game_switches['$[]'](event.$switch_id()))) {
+          this.interpreter.$setup(event.$list());
+          return event;
+        }
+      }
+      return nil;
     });
   })($nesting[0], null, $nesting)
 })(Opal, self);

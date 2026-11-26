@@ -4,7 +4,25 @@ const autosaveInterval=new URLSearchParams(location.search).get('perf')==='pi4'?
 const autosaveMinimumGap=30000;
 
 function validCheckpoint(record){
- return Number.isFinite(record?.time) && Array.isArray(record.header?.nodes) && Array.isArray(record.body?.nodes);
+ const body=record?.body;
+ const packed=body?.codec==='gzip-json-1' && (body.bytes instanceof Uint8Array || typeof body.bytes==='string');
+ return Number.isFinite(record?.time) && Array.isArray(record.header?.nodes) && (Array.isArray(body?.nodes)||packed);
+}
+function compactCheckpoint(record,legacy=false){
+ if(!globalThis.fflate || !Array.isArray(record.body?.nodes))return record;
+ // Old IndexedDB graphs can contain special numbers represented natively.
+ const replacer=legacy?(_key,v)=>typeof v==='number'?saveNumber(v):v:undefined;
+ const data=new TextEncoder().encode(JSON.stringify(record.body,replacer));
+ record.body={codec:'gzip-json-1',bytes:fflate.gzipSync(data,{level:1})};
+ return record;
+}
+function checkpointForWebStorage(record){
+ if(record.body?.codec!=='gzip-json-1')return record;
+ const bytes=record.body.bytes;
+ if(typeof bytes==='string')return record;
+ let binary='';
+ for(let i=0;i<bytes.length;i+=16384)binary+=String.fromCharCode(...bytes.subarray(i,i+16384));
+ return {...record,body:{codec:'gzip-json-1',bytes:btoa(binary)}};
 }
 function openAutosaveDatabase(){
  return new Promise((resolve,reject)=>{
@@ -25,7 +43,7 @@ const autosave={
  db:null,session:null,mapId:0,afterBattle:false,writing:false,dueAt:0,retryAt:0,
  async prepare(){
   // A file URL or a privacy setting can leave only Web Storage available.
-  try{const fallback=readSlot('auto');if(validCheckpoint(fallback))autosaveRecord=fallback;}catch{}
+  try{const fallback=readSlot('auto');if(validCheckpoint(fallback))autosaveRecord=compactCheckpoint(fallback,true);}catch{}
   try{
    if(!globalThis.indexedDB)return;
    const db=await openAutosaveDatabase();this.db=db;
@@ -34,11 +52,11 @@ const autosave={
     const request=db.transaction(autosaveStore).objectStore(autosaveStore).get('latest');
     request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
    });
-   if(validCheckpoint(saved) && (!autosaveRecord || saved.time>=autosaveRecord.time))autosaveRecord=saved;
+   if(validCheckpoint(saved) && (!autosaveRecord || saved.time>=autosaveRecord.time))autosaveRecord=compactCheckpoint(saved,true);
   }catch(e){this.db?.close();this.db=null;console.warn('Autosave storage:',e.message);}
  },
  persist(record){
-  if(!this.db){localStorage.setItem(saveKey('auto'),JSON.stringify(record));return;}
+  if(!this.db){localStorage.setItem(saveKey('auto'),JSON.stringify(checkpointForWebStorage(record)));return;}
   return new Promise((resolve,reject)=>{
    const tx=this.db.transaction(autosaveStore,'readwrite');
    tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error||Error('Autosave transaction aborted'));
@@ -68,7 +86,7 @@ const autosave={
   this.writing=true;
   const session=this.session;
   try{
-   const record=makeSaveRecord(true);
+   const record=compactCheckpoint(makeSaveRecord(true));
    await this.persist(record);
    this.lastWrite=now;autosaveRecord=record;this.notify?.('บันทึกอัตโนมัติแล้ว');
   }catch(e){

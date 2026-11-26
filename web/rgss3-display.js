@@ -315,11 +315,19 @@
         }
       }
     }
+    markBitmapEdited(bitmap){
+      bitmap.fileBacked=false;
+      if(bitmap.beforeEdit){
+        for(const pin of bitmap.beforeEdit)pin();
+        bitmap.beforeEdit=null;
+      }
+    }
     queueBitmap(op,args){
       const b=this.bitmaps.get(args[0]);
       const slot={'bitmap-copy':1,'bitmap-blt':3,'bitmap-stretch-blt':5}[op];
       const src=slot===undefined?null:this.bitmaps.get(args[slot]);
       if(!b || (slot!==undefined&&!src))return;
+      this.markBitmapEdited(b);
       const resources=src&&src!==b?[b,src]:[b];
       const waits=resources.map(bitmap=>bitmap.tail).filter(Boolean);
       const draw=()=>{
@@ -352,7 +360,7 @@
         case 'bitmap-load':{
           const [id,path]=args;
           this.makeBitmap(id,1,1);
-          const bitmap=this.bitmaps.get(id);bitmap.ready=false;
+          const bitmap=this.bitmaps.get(id);bitmap.ready=false;bitmap.fileBacked=true;
           const tail=this.loadBitmap(bitmap,path).catch(e=>console.warn('Bitmap load:',e));
           bitmap.tail=tail;
           tail.then(()=>{bitmap.ready=true;bitmap.version++;if(bitmap.tail===tail)bitmap.tail=null;});
@@ -365,7 +373,7 @@
         }
         case 'bitmap-snapshot':{
           const b=this.bitmaps.get(args[0]);
-          if(b){this.render();const c=this.writable(b);
+          if(b){this.markBitmapEdited(b);this.render();const c=this.writable(b);
             if(this.gpu)this.gpu.snapshot(c);else c.drawImage(this.canvas,0,0);
             b.version++;this.gpu?.invalidate(b.canvas);}
           return;

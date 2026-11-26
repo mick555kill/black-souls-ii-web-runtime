@@ -14,7 +14,7 @@
    if(v===null||typeof v==='string'||typeof v==='boolean'||Number.isFinite(v))return;
    if(Array.isArray(v)&&v.length===1&&Number.isInteger(v[0])&&v[0]>=0&&v[0]<nodes.length)return;
    if(v&&typeof v==='object'&&Object.keys(v).length===1){
-    if(v.jsNull===true)return;
+    if(v.jsNull===true || ['NaN','Infinity','-Infinity','-0'].includes(v.rgssNumber))return;
     if(typeof v.rgssConstant==='string'){constant(v.rgssConstant);return;}
    }
    throw Error('Invalid save reference');
@@ -68,7 +68,8 @@
   try{
    const i=slot();if(!active||!validSlot(i))throw Error('เลือกช่องเซฟก่อน');
    const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ยังไม่มีเซฟ');
-   const blob=new Blob([JSON.stringify({format,version,slot:i,record})],{type:'application/json'});
+   const portable={...record,body:checkpointGraph(record.body)};
+   const blob=new Blob([JSON.stringify({format,version,slot:i,record:portable})],{type:'application/json'});
    const url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download='BlackSoulsII-'+(i===AUTOSAVE_SLOT?'autosave':'file-'+(i+1))+'-'+new Date(record.time).toISOString().slice(0,10)+'.bs2save.json';
    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -95,7 +96,8 @@
    if(readSlot(i)&&!window.confirm('แทนที่ '+label(i)+' ด้วยไฟล์ที่เลือกหรือไม่?')){tell('ยกเลิกการนำเข้า');return;}
    if(i===AUTOSAVE_SLOT){
     if(autosave.writing)throw Error('Autosave กำลังทำงาน ลองอีกครั้ง');
-    await autosave.persist(record);autosaveRecord=record;
+    const checkpoint=compactCheckpoint(record);
+    await autosave.persist(checkpoint);autosaveRecord=checkpoint;
    }else await writeManualSlot(i,record);
    const win=Opal.SceneManager.$scene()?.command_window;
    if(typeof win?.$refresh==='function')win.$refresh();
