@@ -5,6 +5,7 @@ module RGSSWeb
     %x{
       for (const key of properties) {
         Opal.defn(klass, '$' + key + '=', function(value) {
+          if (this[key] === value) return;
           this[key] = value;
           return globalThis.rgssHost[operation](this.id, key, value);
         });
@@ -237,11 +238,11 @@ class Bitmap
   def initialize(width, height = nil)
     if width.is_a?(String)
       @width, @height = RGSSWeb.host.bitmapSize(width)
-      @id = RGSSWeb.host.bitmapLoad(width).to_i
+      @id = RGSSWeb.host.bitmapLoad(width, self).to_i
     else
       @width, @height = width.to_i, height.to_i
       raise ArgumentError, 'invalid bitmap size' unless @width > 0 && @height > 0
-      @id = RGSSWeb.host.bitmapCreate(@width, @height).to_i
+      @id = RGSSWeb.host.bitmapCreate(@width, @height, self).to_i
     end
     @disposed = false
     @font = Font.new
@@ -249,7 +250,7 @@ class Bitmap
   def disposed?; @disposed; end
   def dispose
     return if @disposed
-    RGSSWeb.host.bitmapDispose(@id)
+    RGSSWeb.host.bitmapDispose(@id, self)
     @disposed = true
   end
   def clear
@@ -299,7 +300,7 @@ class Bitmap
   end
   def initialize_copy(source)
     super
-    @id=RGSSWeb.host.bitmapCreate(@width,@height)
+    @id = RGSSWeb.host.bitmapCreate(@width, @height, self)
     @font=source.font.clone
     RGSSWeb.host.bitmapCopy(@id,source.id)
   end

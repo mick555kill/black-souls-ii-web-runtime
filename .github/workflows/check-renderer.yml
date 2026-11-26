@@ -12,6 +12,12 @@ on:
       - 'web/autotile.js'
       - 'web/host.js'
       - 'web/player.js'
+      - 'web/bitmap-cache.js'
+      - 'web/project.js'
+      - 'web/autosave.js'
+      - 'web/saves.js'
+      - 'web/save-transfer.js'
+      - 'playtest-resources.cjs'
       - 'web/pad-settings.js'
       - 'web/cheats.js'
       - 'web/crt.js'
@@ -32,6 +38,8 @@ jobs:
           fetch-depth: 0
       - name: Check high-level stats and custom modifiers
         run: node playtest-levels.cjs
+      - name: Check image ownership, file reuse and checkpoint formats
+        run: node playtest-resources.cjs
       - name: Compare pixels and count draw calls in Chromium
         env:
           REFERENCE_REV: ${{ github.event.pull_request.base.sha || 'HEAD' }}

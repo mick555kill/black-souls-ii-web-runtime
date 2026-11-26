@@ -13,6 +13,7 @@
 
       for (const key of properties) {
         Opal.defn(klass, '$' + key + '=', function(value) {
+          if (this[key] === value) return;
           this[key] = value;
           return globalThis.rgssHost[operation](this.id, key, value);
         });
@@ -476,14 +477,14 @@
       if ($truthy(width['$is_a?']($$('String')))) {
         
         $b = $$('RGSSWeb').$host().$bitmapSize(width), $a = $to_ary($b), (self.width = ($a[0] == null ? nil : $a[0])), (self.height = ($a[1] == null ? nil : $a[1])), $b;
-        self.id = $$('RGSSWeb').$host().$bitmapLoad(width).$to_i();
+        self.id = $$('RGSSWeb').$host().$bitmapLoad(width, self).$to_i();
       } else {
         
         $a = [width.$to_i(), height.$to_i()], (self.width = $a[0]), (self.height = $a[1]), $a;
         if (!($truthy($rb_gt(self.width, 0)) && ($truthy($rb_gt(self.height, 0))))) {
           self.$raise($$('ArgumentError'), "invalid bitmap size")
         };
-        self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height).$to_i();
+        self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height, self).$to_i();
       };
       self.disposed = false;
       return (self.font = $$('Font').$new());
@@ -498,7 +499,7 @@
       if ($truthy(self.disposed)) {
         return nil
       };
-      $$('RGSSWeb').$host().$bitmapDispose(self.id);
+      $$('RGSSWeb').$host().$bitmapDispose(self.id, self);
       return (self.disposed = true);
     });
     
@@ -588,7 +589,7 @@
       $$initialize_copy.$$p = null;
       
       $send2(self, $find_super(self, 'initialize_copy', $$initialize_copy, false, true), 'initialize_copy', [source], $yield);
-      self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height);
+      self.id = $$('RGSSWeb').$host().$bitmapCreate(self.width, self.height, self);
       self.font = source.$font().$clone();
       return $$('RGSSWeb').$host().$bitmapCopy(self.id, source.$id());
     });

@@ -16,14 +16,35 @@
       this.maps = {}; this.tilesets = []; this.system = null; this.actors = []; this.commonEvents = [];
       this.retainImages=opts.retainImages!==false;
       this.imageCache = new Map();this.liveImages=new Map();
+      this.imageFiles=new Map();this.imageFileBytes=0;
       this.decodeActive=0;this.decodeQueue=[];
       this.decodeLimit=4;
       this.retainedBytes=0;this.retainedImages=new Map(); this.missing = new Set();
     }
+    // Keep a small set of the original PNG/JPEG bytes. Redecoding a recently
+    // evicted texture can then avoid a second file read or archive decryption.
+    async imageBytes(path) {
+      const limit=24*1024*1024;
+      const cached=this.imageFiles.get(path);
+      if(cached){
+        this.imageFiles.delete(path);this.imageFiles.set(path,cached);
+        return cached;
+      }
+      const bytes=await this.source.read(path,32*1024*1024);
+      if(this.retainImages || bytes.byteLength>limit)return bytes;
+      if(!this.imageFiles.has(path)){
+        this.imageFiles.set(path,bytes);this.imageFileBytes+=bytes.byteLength;
+        while(this.imageFileBytes>limit || this.imageFiles.size>192){
+          const [old,data]=this.imageFiles.entries().next().value;
+          this.imageFiles.delete(old);this.imageFileBytes-=data.byteLength;
+        }
+      }
+      return bytes;
+    }
     async decodeAsset(path) {
       if(this.decodeActive>=this.decodeLimit)await new Promise(resolve=>this.decodeQueue.push(resolve));
       else this.decodeActive++;
-      try{return await this.decode(await this.source.read(path,32*1024*1024));}
+      try{return await this.decode(await this.imageBytes(path));}
       finally{const next=this.decodeQueue.shift();if(next)next();else this.decodeActive--;}
     }
     async data(name) {

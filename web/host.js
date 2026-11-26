@@ -9,6 +9,15 @@ function inputName(key){
   return inputNames[name]||name.toLowerCase();
 }
 function sendRGSS(op,args){ if(globalThis.display)display.handle({op,args}); }
+// Sprites, windows and the game's RGSS Cache keep the Ruby bitmap alive. The
+// numeric bridge ID alone must not keep its canvas/texture forever.
+const bitmapOwners=typeof FinalizationRegistry==='function'
+  ? new FinalizationRegistry(id=>sendRGSS('bitmap-dispose',[id])) : null;
+function bitmapId(owner){
+ const id=nextGraphicsId++;
+ if(owner && globalThis.display)bitmapOwners?.register(owner,id,owner);
+ return id;
+}
 const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
   flash:(type,id,color,duration,start)=>sendRGSS('flash',[type,id,color===Opal.nil?null:color,duration,start]),
   resize:(w,h)=>sendRGSS('resize',[w,h]),
@@ -30,9 +39,9 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
   },
   inputDir4(){for(const [name,d] of directions)if(sampledKeys.has(name))return d;return 0;},
   audio:(...args)=>sendRGSS('audio',args),
-  bitmapCreate(w,h){const id=nextGraphicsId++;sendRGSS('bitmap-create',[id,w,h]);return id;},
-  bitmapLoad(name){const id=nextGraphicsId++;sendRGSS('bitmap-load',[id,name]);return id;},
-  bitmapDispose:id=>sendRGSS('bitmap-dispose',[id]),
+  bitmapCreate(w,h,owner){const id=bitmapId(owner);sendRGSS('bitmap-create',[id,w,h]);return id;},
+  bitmapLoad(name,owner){const id=bitmapId(owner);sendRGSS('bitmap-load',[id,name]);return id;},
+  bitmapDispose(id,owner){if(owner)bitmapOwners?.unregister(owner);sendRGSS('bitmap-dispose',[id]);},
   bitmapCopy:(...a)=>sendRGSS('bitmap-copy',a),
   bitmapHue:(...a)=>sendRGSS('bitmap-hue',a),
   bitmapRadialBlur:(...args)=>sendRGSS('bitmap-radial-blur',args),
@@ -64,7 +73,6 @@ const hostMethods={frame(n){if(globalThis.display)display.frameNumber=n;},
 };
 globalThis.rgssHost = Object.fromEntries(Object.entries(hostMethods).map(([k,v])=>['$'+k,v]));
 Opal.require('corelib/string/unpack');
-Opal.require('opal/compiler');
 const compiledCodeCache=new Map();
 let compiledCodeBytes=0;
 Opal.compile=(source,options={})=>{
@@ -75,6 +83,7 @@ Opal.compile=(source,options={})=>{
  if(key!==null&&compiledCodeCache.has(key)){
   const hit=compiledCodeCache.get(key);compiledCodeCache.delete(key);compiledCodeCache.set(key,hit);return hit;
  }
+ Opal.require('opal/compiler');
  const code=String(Opal.Opal.Compiler.$new(String(source),Opal.hash(config)).$compile());
  if(key!==null){
   const bytes=2*(key.length+code.length),limit=2*1024*1024;

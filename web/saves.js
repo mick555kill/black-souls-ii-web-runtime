@@ -1,12 +1,14 @@
 // Preserve RGSS class identities, Hash keys, and shared references in each browser save.
 class PendingSaveAction extends Error {}
 function saveConstant(name){return name.split('::').reduce((scope,key)=>scope?.[key],Opal);}
+function saveNumber(n){return Number.isFinite(n) && !Object.is(n,-0)?n:{rgssNumber:Object.is(n,-0)?'-0':String(n)};}
 function packSave(root){
  const nodes=[],ids=new Map();
  function encode(value){
   if(value==null)return {jsNull:true};
   if(value===Opal.nil)return null;
-  if(['number','boolean','string'].includes(typeof value))return value;
+  if(typeof value==='number')return saveNumber(value);
+  if(typeof value==='boolean'||typeof value==='string')return value;
   if(value instanceof String)return String(value);
   // Game_BaseItem stores RPG::Weapon or RPG::Armor itself in an equipment slot.
   if(value.$$is_a_module){
@@ -30,9 +32,18 @@ function packSave(root){
  }
  return {root:encode(root),nodes};
 }
+function checkpointGraph(graph){
+ if(graph?.codec==='gzip-json-1'){
+  const bytes=typeof graph.bytes==='string'?Uint8Array.from(atob(graph.bytes),c=>c.charCodeAt(0)):graph.bytes;
+  graph=JSON.parse(new TextDecoder().decode(fflate.gunzipSync(bytes)));
+ }
+ return graph;
+}
 function unpackSave(graph){
+ graph=checkpointGraph(graph);
  const objects=graph.nodes.map(n=>n.type==='array'?[]:n.type==='hash'?Opal.hash():saveConstant(n.type).$allocate());
  const decode=v=>{
+  if(v?.rgssNumber)return Number(v.rgssNumber);
   if(v?.rgssConstant){
    const constant=saveConstant(v.rgssConstant);
    if(!constant?.$$is_a_module)throw Error('Unknown RGSS constant '+v.rgssConstant);

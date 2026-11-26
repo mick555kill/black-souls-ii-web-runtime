@@ -63,7 +63,7 @@
    }
    let voices=0;for(const set of d.channels.values())voices+=set.size;
    const lines=[
-    'FPS: '+(stats.frames/Math.max(.001,(now-stats.lastReport)/1000)).toFixed(1)+' | scene: '+(Opal.SceneManager.$scene()?.$$class?.$$name||'?'),
+    'Draw FPS: '+(stats.paints/Math.max(.001,(now-stats.lastReport)/1000)).toFixed(1)+' | game ticks/s: '+(stats.frames/Math.max(.001,(now-stats.lastReport)/1000)).toFixed(1)+' | scene: '+(Opal.SceneManager.$scene()?.$$class?.$$name||'?'),
     'Renderer: '+d.gpuMode+' '+(d.gpuDevice||''),
     'Logic: '+(stats.updateMs/Math.max(1,stats.frames)).toFixed(2)+' ms/frame | render+filter: '+(stats.renderMs/Math.max(1,stats.frames)).toFixed(2)+' ms/frame | slow frames: '+stats.slowFrames,
     'Bitmap handles: '+d.bitmaps.size+' | surfaces: '+surfaces.size+' | estimated RGBA: '+mb(bitmapBytes)+' MiB',
@@ -76,7 +76,7 @@
    for(const [name,v] of [...counts.entries()].sort((a,b)=>b[1].ms-a[1].ms)){
     lines.push(name+': '+v.calls+' calls, '+v.ms.toFixed(1)+' ms'+(v.bytes?' / '+mb(v.bytes)+' MiB':''));
    }
-   lastText=lines.join('\n');pre.textContent=lastText;heading.textContent='Runtime profiler | '+(stats.frames/Math.max(.001,(now-stats.lastReport)/1000)).toFixed(0)+' FPS';
+   lastText=lines.join('\n');pre.textContent=lastText;heading.textContent='Runtime profiler | '+(stats.paints/Math.max(.001,(now-stats.lastReport)/1000)).toFixed(0)+' FPS';
    counts.clear();started=now;
    console.info(lastText);
    return lastText;

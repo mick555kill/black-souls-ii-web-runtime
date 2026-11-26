@@ -249,10 +249,12 @@ async function checkFilterControls(context){
   const tab=await context.newPage(),url=require('node:url').pathToFileURL(path.join(__dirname,'index.html')).href;
   try{
     await tab.goto(url);
-    const menu=tab.locator('.pad-settings summary'),level=tab.getByLabel('อัปสเกลภาพ');
+    const menu=tab.locator('.pad-settings summary'),level=tab.getByLabel('อัปสเกลภาพ'),rate=tab.locator('#render-rate');
     await menu.tap();
     if(await level.inputValue()!=='1')throw Error('First visit should use native resolution');
-    await level.selectOption('32');await tab.reload();
+    if(await rate.inputValue()!=='30')throw Error('First visit should draw at 30 FPS');
+    await rate.selectOption('60');await level.selectOption('32');await tab.reload();
+    if(await rate.inputValue()!=='60')throw Error('Render rate did not survive reload');
     if(await level.inputValue()!=='32')throw Error('Upscale preference did not survive reload');
     await tab.evaluate(()=>{
       // Exercise the public Canvas fallback on devices without any WebGL context.
@@ -283,7 +285,7 @@ async function checkFilterControls(context){
     await tab.evaluate(()=>localStorage.setItem('bs2.upscale','3'));
     await tab.reload();
     if(await level.inputValue()!=='1')throw Error('Unknown scale should restore native size');
-    await tab.evaluate(()=>localStorage.removeItem('bs2.upscale'));
+    await tab.evaluate(()=>{localStorage.removeItem('bs2.upscale');localStorage.removeItem('bs2.renderRate');});
     return {persisted:true,canvasFallback:true,idleSkipped:true};
   }finally{await tab.close();}
 }
@@ -296,7 +298,8 @@ async function checkPlayer(context){
   await tab.goto(require('node:url').pathToFileURL(path.join(__dirname,'index.html')).href);
   await tab.evaluate(()=>{
     const nativeRequest=window.requestAnimationFrame.bind(window),nativeCancel=window.cancelAnimationFrame.bind(window);
-    const queue=new Map();let serial=0,updates=0,hidden=false,saves=0;
+    const queue=new Map();let serial=0,updates=0,paints=0,hidden=false,saves=0;
+    const draw=display.render.bind(display);display.render=()=>{paints++;return draw();};
     window.requestAnimationFrame=cb=>{
       if(cb!==tick)return nativeRequest(cb);
       const id=--serial;queue.set(id,cb);return id;
@@ -317,7 +320,7 @@ async function checkPlayer(context){
         return updates;
       },
       hide(value){hidden=value;document.dispatchEvent(new Event('visibilitychange'));},
-      get saves(){return saves;}
+      get saves(){return saves;},get updates(){return updates;},get paints(){return paints;}
     };
   });
   const immediate=await tab.evaluate(()=>{
@@ -336,6 +339,7 @@ async function checkPlayer(context){
   await tab.waitForFunction(()=>checkLoop.count===1);
   const resumed=await tab.evaluate(()=>{
     checkLoop.pulse(60);checkLoop.hide(true);
+    window.dispatchEvent(new Event('pagehide'));
     if(checkLoop.count!==0||checkLoop.saves!==1)return false;
     window.dispatchEvent(new Event('pageshow'));
     if(checkLoop.count!==0)return false;
@@ -343,6 +347,16 @@ async function checkPlayer(context){
     return checkLoop.pulse(5000)===4 && checkLoop.count===1;
   });
   if(!resumed)throw Error('Menu or visibility pause/resume failed');
+  await tab.evaluate(()=>{
+    for(const hz of [60,120,144])for(const fps of [30,60]){
+      checkLoop.hide(true);checkLoop.hide(false);
+      const rate=el('render-rate');rate.value=String(fps);rate.dispatchEvent(new Event('change'));
+      const start=checkLoop.updates,draws=checkLoop.paints;
+      for(let frame=0;frame<2*hz;frame++)checkLoop.pulse(10000+frame*1000/hz);
+      if(checkLoop.updates-start!==120 || checkLoop.paints-draws!==2*fps)throw Error('Cadence mismatch at '+hz+' Hz / '+fps+' FPS');
+    }
+    localStorage.removeItem('bs2.renderRate');
+  });
   if(errors.length)throw Error(errors.join('\n'));
   await tab.close();return {touchTap:true,menuResume:true,visibilityResume:true};
 }

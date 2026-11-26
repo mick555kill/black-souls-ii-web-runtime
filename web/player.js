@@ -3,16 +3,17 @@ const el=id=>document.getElementById(id);
 const lowPowerMode=new URLSearchParams(location.search).get('perf')==='pi4';
 const mapCacheLimit=lowPowerMode?4:8;
 const pendingMaps=new Map();
-let project,scene,active=false,frameTime=0,animationRequest=null;
+let project,scene,active=false,frameTime=null,animationRequest=null;
 let autosaveNoticeTimer;
 const profileEnabled=new URLSearchParams(location.search).has('profile');
-const perfStats={frames:0,updateMs:0,renderMs:0,slowFrames:0,mapLoads:0,mapMs:0,lastReport:performance.now()};
+const perfStats={frames:0,paints:0,updateMs:0,renderMs:0,slowFrames:0,mapLoads:0,mapMs:0,lastReport:performance.now()};
 globalThis.runtimePerf=()=>({...perfStats,renderer:display.gpuMode,bitmaps:display.bitmaps.size,sprites:display.sprites.size,textureBytes:display.gpu?.bytes??0,decodedImageBytes:project?.retainedBytes??0,compiledCodeBytes,mapCache:[...database.keys()].filter(k=>/^data\/map\d+\.rvdata2$/.test(k)).length});
 autosave.notify=text=>{
  const notice=el('autosave-status');notice.textContent=text;notice.hidden=false;
  clearTimeout(autosaveNoticeTimer);autosaveNoticeTimer=setTimeout(()=>{notice.hidden=true;},2600);
 };
 globalThis.display=new VX.RGSS3Display(el('screen'),()=>project);
+boundBitmapCache(Opal.Cache,display);
 display.rendererChanged=()=>{
  el('screen').style.opacity=display.gpu?'0':'';
  const status=el('renderer-status');status.textContent=display.gpuMode;status.title=display.gpuDevice||display.gpuMode;
@@ -111,34 +112,52 @@ if(shortMoveProto){
   return true;
  };
 }
+const renderRate=el('render-rate');
+let paintDeadline=null;
+try{if(localStorage.getItem('bs2.renderRate')==='60')renderRate.value='60';}catch{}
+let paintInterval=1000/Number(renderRate.value);
+renderRate.addEventListener('change',()=>{
+ paintInterval=1000/Number(renderRate.value);paintDeadline=null;
+ try{localStorage.setItem('bs2.renderRate',renderRate.value);}catch{}
+});
+function paintFrame(t,force=false){
+ if(!force && paintDeadline!==null && t+0.5<paintDeadline)return;
+ const late=paintDeadline===null?0:Math.max(0,t-paintDeadline);
+ paintDeadline=t+paintInterval-(late%paintInterval);
+ const painted=display.render();crt.draw();
+ if(profileEnabled && painted)perfStats.paints++;
+}
 function scheduleTick(){
  if(active && !document.hidden && !cheatMenu.open && !el('save-transfer')?.open && animationRequest===null)
   animationRequest=requestAnimationFrame(tick);
 }
 function pauseTick(){
  if(animationRequest!==null)cancelAnimationFrame(animationRequest);
- animationRequest=null;frameTime=0;
+ animationRequest=null;frameTime=null;paintDeadline=null;
 }
 function tick(t){
  animationRequest=null;
  if(!active || document.hidden || cheatMenu.open || el('save-transfer')?.open)return;
  try{
-  if(t-frameTime>=15){
-   frameTime=t;const current=Opal.SceneManager.$scene();
+  const step=1000/60;
+  if(frameTime===null || t+0.5>=frameTime){
+   const late=frameTime===null?0:Math.max(0,t-frameTime);
+   frameTime=t+step-(late%step);
+   const current=Opal.SceneManager.$scene();
    if(current===Opal.nil){active=false;el('status').textContent='จบการทำงาน';return;}
    if(current!==scene && scene?.browserBattleMessage){
-    scene.advanceBrowserBattleMessage();display.render();crt.draw();scheduleTick();return;
+    scene.advanceBrowserBattleMessage();paintFrame(t);scheduleTick();return;
    }
-   if(current!==scene){
+   const entering=current!==scene;
+   if(entering){
     if(scene){scene.$pre_terminate();scene.$terminate();}
     scene=current;scene.$start();scene.$post_start();
     cheatMenu.hidden=![Opal.Scene_Map,Opal.Scene_Battle].includes(scene.$$class);
-
    }
    // Direct transfers and restored saves can bypass the event preload.
    // Keep rendering while their map sheets finish, but don't advance map input.
    if(scene.$$class===Opal.Scene_ShortMove&&scene.$browser_finish_travel?.()){
-    display.render();crt.draw();scheduleTick();return;
+    paintFrame(t);scheduleTick();return;
    }
    const pendingArt=scene.$$class===Opal.Scene_Map&&display.mapAssetsPending();
    if(!pendingArt){if(mapWaitStart)showTravelStatus('');mapWaitStart=0;}
@@ -146,13 +165,13 @@ function tick(t){
    const waitForMap=pendingArt&&t-mapWaitStart<8000;
    if(pendingArt&&!waitForMap)showTravelStatus('ภาพฉากยังโหลดอยู่ · เปิดให้เล่นต่อแล้ว');
    if(profileEnabled){
-    const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();display.render();crt.draw();const done=performance.now();
+    const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();paintFrame(t,entering);const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
     if(done-perfStats.lastReport>=5000){
      if(globalThis.runtimeProbe)runtimeProbe.report(perfStats);else console.info('Runtime profile',globalThis.runtimePerf());
-     perfStats.frames=perfStats.updateMs=perfStats.renderMs=perfStats.slowFrames=0;perfStats.lastReport=done;
+     perfStats.frames=perfStats.paints=perfStats.updateMs=perfStats.renderMs=perfStats.slowFrames=0;perfStats.lastReport=done;
     }
-   }else{if(!waitForMap)scene.$update();display.render();crt.draw();}
+   }else{if(!waitForMap)scene.$update();paintFrame(t,entering);}
    if(!waitForMap)autosave.update(scene,t);
   }
   scheduleTick();
@@ -168,7 +187,7 @@ el('folder').onchange=async e=>{
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
-  project=new VX.Project(source,{retainImages:true});await Promise.all([prepareDatabase(project),autosave.prepare(),prepareManualSaves(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
+  project=new VX.Project(source,{retainImages:false});await Promise.all([prepareDatabase(project),autosave.prepare(),prepareManualSaves(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
   display.enabled=true;
   if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('เลือกผ่านลิงก์');
@@ -220,10 +239,16 @@ function releaseControls(){
  for(const button of padButtons)button.classList.remove('pressed');
 }
 onblur=releaseControls;
-function leavePage(){pauseTick();releaseControls();if(active)autosave.update(scene,performance.now(),true);}
-document.addEventListener('visibilitychange',()=>{if(document.hidden)leavePage();else scheduleTick();});
+let inBackground=false;
+function leavePage(){
+ pauseTick();releaseControls();
+ if(active&&!inBackground)autosave.update(scene,performance.now(),true);
+ inBackground=true;
+}
+function resumePage(){if(!document.hidden){inBackground=false;scheduleTick();}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)leavePage();else resumePage();});
 window.addEventListener('pagehide',leavePage);
-window.addEventListener('pageshow',scheduleTick);
+window.addEventListener('pageshow',resumePage);
 // A native long-press menu or selection can interrupt a held game input on iPad.
 for(const eventName of ['contextmenu','selectstart']){
  document.addEventListener(eventName,event=>{
