@@ -29,7 +29,7 @@ el('spawn-form').onsubmit=event=>{
  const party=Opal.gvars.game_party, before=party.$item_number(item);
  party.$gain_item(item,count);
  const total=party.$item_number(item);
- feedback.textContent=thaiLocale.text(item.name)+' +'+(total-before)+' · มีทั้งหมด '+total;
+ feedback.textContent=thaiLocale.text(item.name)+' +'+(total-before)+' · Total: '+total;
 };
 el('money-form').onsubmit=event=>{
  event.preventDefault();
@@ -37,7 +37,7 @@ el('money-form').onsubmit=event=>{
  if(!Number.isSafeInteger(amount) || amount<1)return;
  const party=Opal.gvars.game_party,before=party.$gold();
  party.$gain_gold(amount);
- feedback.textContent='เงิน +'+(party.$gold()-before)+' · มีทั้งหมด '+party.$gold();
+ feedback.textContent='Gold +'+(party.$gold()-before)+' · Total: '+party.$gold();
 };
 // SEN is game variable 38, not the party's gold. Keep its threshold switches
 // consistent with the original interpreter in game/118.js.
@@ -67,7 +67,7 @@ el('sen-form').onsubmit=event=>{
   const {before,after}=changeSen(delta);
   refreshSenControl();
   const changed=after-before;
-  feedback.textContent='SEN '+(changed>=0?'+':'')+changed+' · ปัจจุบัน '+after;
+  feedback.textContent='SEN '+(changed>=0?'+':'')+changed+' · Current: '+after;
  }catch(error){feedback.textContent=String(error.message||error);}
 };
 const oneHit=el('one-hit');

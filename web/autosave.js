@@ -88,11 +88,11 @@ const autosave={
   try{
    const record=compactCheckpoint(makeSaveRecord(true));
    await this.persist(record);
-   this.lastWrite=now;autosaveRecord=record;this.notify?.('บันทึกอัตโนมัติแล้ว');
+   this.lastWrite=now;autosaveRecord=record;this.notify?.('Autosaved');
   }catch(e){
    const waiting=e instanceof PendingSaveAction;
    if(this.session===session){this.retryAt=now+(waiting?1000:15000);this.dueAt=this.retryAt;}
-   if(!waiting){console.warn('Autosave failed',e);this.notify?.('บันทึกอัตโนมัติไม่สำเร็จ');}
+   if(!waiting){console.warn('Autosave failed',e);this.notify?.('Autosave failed');}
   }finally{this.writing=false;}
  }
 };
@@ -127,25 +127,25 @@ function runSaveIO(scene,message,action,success){
   if(Opal.SceneManager.$scene()!==scene)return;
   success();saveIOStatus('');
  }).catch(error=>{
-  console.warn('Save IO:',error);saveIOStatus('เซฟ/โหลดไม่สำเร็จ: '+String(error.message||error));Opal.Sound.$play_buzzer();
+  console.warn('Save IO:',error);saveIOStatus('Save/load failed: '+String(error.message||error));Opal.Sound.$play_buzzer();
  }).finally(()=>{scene.browserSaveIO=false;});
  return Opal.nil;
 }
 Opal.Scene_Save.$$prototype.$on_savefile_ok=function(){
  const i=this.index;
- return runSaveIO(this,'กำลังบันทึกเซฟ…',async()=>{
+ return runSaveIO(this,'Saving…',async()=>{
   const record=makeSaveRecord();await writeManualSlot(i,record);dm.last_savefile_index=i;
  },()=>this.$on_save_success());
 };
 loadFiles.$on_savefile_ok=function(){
  const i=this.savefile_windows[this.index]?.file_index;
- if(!Number.isInteger(i)){saveIOStatus('ไม่พบช่องเซฟที่เลือก');return Opal.Sound.$play_buzzer();}
- return runSaveIO(this,'กำลังโหลดเซฟ…',async()=>{
-  const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ไม่มีเซฟ');
-  saveIOStatus('กำลังกู้ข้อมูลตัวละครและแผนที่…');
+ if(!Number.isInteger(i)){saveIOStatus('Selected save slot not found');return Opal.Sound.$play_buzzer();}
+ return runSaveIO(this,'Loading save…',async()=>{
+  const record=await readFullSlot(i);if(!record)throw Error('This save slot is empty');
+  saveIOStatus('Restoring character and map data…');
   const contents=unpackSave(record.body),map=contents['$[]']('map');
   if(!Number.isInteger(map?.map_id)||map.map_id<=0)throw Error('Invalid saved map ID');
-  saveIOStatus('กำลังโหลดแผนที่ '+map.map_id+'…');
+  saveIOStatus('Loading map '+map.map_id+'…');
   await loadRequiredMap(map.map_id);
   if(Opal.SceneManager.$scene()!==this)throw Error('Load cancelled');
   dm.$extract_save_contents(contents);dm.$reload_map_if_updated();

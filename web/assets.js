@@ -33,7 +33,7 @@
   }
 
   class FolderSource { // File objects from <input webkitdirectory> or drag & drop
-    constructor(files, label = 'โฟลเดอร์') {
+    constructor(files, label = 'Folder') {
       this.label = label; this.index = new Map();
       for (const f of files) {
         const rel = f.webkitRelativePath || f.name, m = TOP.exec(rel);

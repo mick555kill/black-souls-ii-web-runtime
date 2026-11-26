@@ -21,7 +21,7 @@ display.rendererChanged=()=>{
 };
 hostMethods.resize(Opal.Graphics.$width(),Opal.Graphics.$height());
 function errorMessage(error){
- active=false;el('status').classList.add('error');el('status').textContent='หยุดที่ '+(scene?.$$class?.$$name||'เริ่มต้น')+' · '+String(error.message||error);
+ active=false;el('status').classList.add('error');el('status').textContent='Stopped at '+(scene?.$$class?.$$name||'startup')+' · '+String(error.message||error);
  console.error(error);
 }
 async function loadMapData(id){
@@ -88,7 +88,7 @@ if(shortMoveProto){
   const state={id,ready:false,error:null,assets:null};
   this.browserTravelPending=state;
   this.popup_window.$deactivate();
-  showTravelStatus('กำลังโหลดแผนที่ '+id+'…');
+  showTravelStatus('Loading map '+id+'…');
   prepareMapTransfer(id).then(assets=>{state.assets=assets;state.ready=true;},error=>{state.error=error;});
   return Opal.nil;
  };
@@ -98,17 +98,17 @@ if(shortMoveProto){
   if(state.error){
    this.browserTravelPending=null;
    this.popup_window.$activate();
-   showTravelStatus('โหลดแผนที่ '+state.id+' ไม่สำเร็จ: '+String(state.error.message||state.error)+' · กดเดินทางอีกครั้ง');
+   showTravelStatus('Could not load map '+state.id+': '+String(state.error.message||state.error)+' · Try traveling again');
    console.error('Fast travel:',state.error);
    return true;
   }
   if(!state.ready)return true;
   this.browserTravelPending=null;
-  showTravelStatus('กำลังเข้าสู่ฉาก '+state.id+'…');
+  showTravelStatus('Entering map '+state.id+'…');
   try{originalPopOk.call(this);}
-  catch(error){showTravelStatus('เดินทางไม่สำเร็จ: '+String(error.message||error));throw error;}
+  catch(error){showTravelStatus('Travel failed: '+String(error.message||error));throw error;}
   if(Opal.SceneManager.$scene()!==this)showTravelStatus('');
-  else{this.popup_window.$activate();showTravelStatus('ยังไม่ได้ย้ายฉาก · ลองกดเดินทางใหม่');}
+  else{this.popup_window.$activate();showTravelStatus('Map transition incomplete · Try again');}
   return true;
  };
 }
@@ -144,7 +144,7 @@ function tick(t){
    const late=frameTime===null?0:Math.max(0,t-frameTime);
    frameTime=t+step-(late%step);
    const current=Opal.SceneManager.$scene();
-   if(current===Opal.nil){active=false;el('status').textContent='จบการทำงาน';return;}
+   if(current===Opal.nil){active=false;el('status').textContent='Runtime stopped';return;}
    if(current!==scene && scene?.browserBattleMessage){
     scene.advanceBrowserBattleMessage();paintFrame(t);scheduleTick();return;
    }
@@ -161,9 +161,9 @@ function tick(t){
    }
    const pendingArt=scene.$$class===Opal.Scene_Map&&display.mapAssetsPending();
    if(!pendingArt){if(mapWaitStart)showTravelStatus('');mapWaitStart=0;}
-   else if(!mapWaitStart){mapWaitStart=t;showTravelStatus('กำลังโหลดภาพฉาก…');}
+   else if(!mapWaitStart){mapWaitStart=t;showTravelStatus('Loading map graphics…');}
    const waitForMap=pendingArt&&t-mapWaitStart<8000;
-   if(pendingArt&&!waitForMap)showTravelStatus('ภาพฉากยังโหลดอยู่ · เปิดให้เล่นต่อแล้ว');
+   if(pendingArt&&!waitForMap)showTravelStatus('Map graphics are still loading · Play resumed');
    if(profileEnabled){
     const u=performance.now();if(!waitForMap)scene.$update();const r=performance.now();paintFrame(t,entering);const done=performance.now();
     perfStats.frames++;perfStats.updateMs+=r-u;perfStats.renderMs+=done-r;if(done-u>16.67)perfStats.slowFrames++;
@@ -180,17 +180,17 @@ function tick(t){
 el('folder').onchange=async e=>{
  const files=[...e.target.files];if(!files.length)return;
  try{
-  el('folder').disabled=true;el('status').textContent='กำลังอ่านฐานข้อมูลเกม…';
+  el('folder').disabled=true;el('status').textContent='Reading game database…';
   display.unlockAudio();
   const game=files.find(f=>/^Game\.rgss3a$/i.test(f.name));
-  if(!game)throw Error('ไม่พบ Game.rgss3a ในโฟลเดอร์ที่เลือก');
+  if(!game)throw Error('Game.rgss3a was not found in the selected folder');
   const archive=await VX.RGSS3Archive.open(game),folder=new VX.FolderSource(files);
   await indexImageSizes(archive,folder);
   const source=new VX.CompositeSource([folder,new VX.ArchiveSource(archive)]);
   project=new VX.Project(source,{retainImages:false});await Promise.all([prepareDatabase(project),autosave.prepare(),prepareManualSaves(),document.fonts?.load('18px "Game Thai"','ภาษาไทย').catch(()=>{})]);
   Opal.DataManager.$init();Opal.SceneManager.$goto(Opal.SceneManager.$first_scene_class());
   display.enabled=true;
-  if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('เลือกผ่านลิงก์');
+  if(new URLSearchParams(location.search).get('renderer')==='canvas2d')display.fallbackGpu('Selected via URL');
   else display.enableGpu(el('gpu-screen'));
   active=true;el('picker').hidden=true;document.body.classList.add('playing');el('screen').focus();scheduleTick();
  }catch(e){el('folder').disabled=false;errorMessage(e);}

@@ -53,56 +53,56 @@
  function refresh(){
   const previous=slots.value;
   slots.replaceChildren();
-  if(!active){tell('เลือกโฟลเดอร์เกมก่อน');download.disabled=upload.disabled=true;return;}
+  if(!active){tell('Select a game folder first');download.disabled=upload.disabled=true;return;}
   for(const i of [AUTOSAVE_SLOT,...Array.from({length:dm.$savefile_max()},(_,i)=>i)]){
    let saved=null;try{saved=readSlot(i);}catch{}
-   const stamp=saved&&Number.isFinite(saved.time)?' · '+new Date(saved.time).toLocaleString():' · ว่าง';
+   const stamp=saved&&Number.isFinite(saved.time)?' · '+new Date(saved.time).toLocaleString():' · Empty';
    slots.add(new Option(label(i)+stamp,String(i)));
   }
   if([...slots.options].some(o=>o.value===previous))slots.value=previous;
   download.disabled=upload.disabled=busy;
  }
  function validSlot(i){return Number.isInteger(i)&&(i===AUTOSAVE_SLOT||i>=0&&i<dm.$savefile_max());}
- panel.addEventListener('toggle',()=>{if(panel.open){pauseTick();releaseControls();refresh();tell(active?'เลือกช่องเซฟ · รองรับ .rvdata2 และ .bs2save.json ที่หน้าเมนูหลัก':'เลือกโฟลเดอร์เกมก่อน');}else{if(active){document.getElementById('screen').focus();scheduleTick();}}});
+ panel.addEventListener('toggle',()=>{if(panel.open){pauseTick();releaseControls();refresh();tell(active?'Select a save slot · .rvdata2 and .bs2save.json imports are supported at the main menu':'Select a game folder first');}else{if(active){document.getElementById('screen').focus();scheduleTick();}}});
  download.onclick=async()=>{
   try{
-   const i=slot();if(!active||!validSlot(i))throw Error('เลือกช่องเซฟก่อน');
-   const record=await readFullSlot(i);if(!record)throw Error('ช่องนี้ยังไม่มีเซฟ');
+   const i=slot();if(!active||!validSlot(i))throw Error('Select a save slot first');
+   const record=await readFullSlot(i);if(!record)throw Error('This save slot is empty');
    const portable={...record,body:checkpointGraph(record.body)};
    const blob=new Blob([JSON.stringify({format,version,slot:i,record:portable})],{type:'application/json'});
    const url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download='BlackSoulsII-'+(i===AUTOSAVE_SLOT?'autosave':'file-'+(i+1))+'-'+new Date(record.time).toISOString().slice(0,10)+'.bs2save.json';
    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
-   tell('ส่งออก '+label(i)+' แล้ว');
+   tell('Exported '+label(i)+'');
   }catch(e){tell(String(e.message||e));}
  };
- upload.onclick=()=>{if(!isTitle()){tell('กลับไปที่หน้าเมนูหลักก่อนนำเข้าเซฟ');return;}file.click();};
+ upload.onclick=()=>{if(!isTitle()){tell('Return to the main menu before importing a save');return;}file.click();};
  file.onchange=async()=>{
   const selected=file.files[0];file.value='';if(!selected||busy)return;
   const i=slot();busy=true;download.disabled=upload.disabled=true;
   try{
-   if(!isTitle()||!validSlot(i))throw Error('นำเข้าได้เฉพาะหน้าเมนูหลัก');
-   if(selected.size>maxFile)throw Error('ไฟล์เกิน 32 MB');
+   if(!isTitle()||!validSlot(i))throw Error('Importing is only available at the main menu');
+   if(selected.size>maxFile)throw Error('File exceeds 32 MB');
    let record;
    if(/\.rvdata2$/i.test(selected.name)){
-    tell('กำลังแปลงเซฟ RPG Maker VX Ace…');
+    tell('Converting RPG Maker VX Ace save…');
     record=validateRecord(VX.parseNativeSave(new Uint8Array(await selected.arrayBuffer()),selected.lastModified||Date.now()));
    }else{
     const payload=JSON.parse(await selected.text());
-    if(payload?.format!==format||payload.version!==version)throw Error('ไม่ใช่ไฟล์เซฟของ Web Runtime รุ่นที่รองรับ');
+    if(payload?.format!==format||payload.version!==version)throw Error('Unsupported Web Runtime save file');
     record=validateRecord(payload.record);
    }
-   if(!isTitle())throw Error('กลับไปหน้าเมนูหลักก่อนนำเข้า');
-   if(readSlot(i)&&!window.confirm('แทนที่ '+label(i)+' ด้วยไฟล์ที่เลือกหรือไม่?')){tell('ยกเลิกการนำเข้า');return;}
+   if(!isTitle())throw Error('Return to the main menu before importing');
+   if(readSlot(i)&&!window.confirm('Replace '+label(i)+' with the selected file?')){tell('Import canceled');return;}
    if(i===AUTOSAVE_SLOT){
-    if(autosave.writing)throw Error('Autosave กำลังทำงาน ลองอีกครั้ง');
+    if(autosave.writing)throw Error('Autosave is in progress. Try again.');
     const checkpoint=compactCheckpoint(record);
     await autosave.persist(checkpoint);autosaveRecord=checkpoint;
    }else await writeManualSlot(i,record);
    const win=Opal.SceneManager.$scene()?.command_window;
    if(typeof win?.$refresh==='function')win.$refresh();
-   tell('นำเข้า '+label(i)+' สำเร็จ · ปิดเมนูเซฟแล้วเลือก Continue');
-  }catch(e){tell('นำเข้าไม่สำเร็จ: '+String(e.message||e));}
+   tell('Imported '+label(i)+' successfully · Close the Saves menu and select Continue');
+  }catch(e){tell('Import failed: '+String(e.message||e));}
   finally{busy=false;refresh();}
  };
  refresh();

@@ -51,7 +51,7 @@
       return new (VX().MarshalReader)(await this.source.read(`Data/${name}.rvdata2`)).parse(); }
     async optional(name, fallback) { try { return await this.data(name); } catch { return fallback; } }
     async initialize() {
-      if (!this.source.has('Data/MapInfos.rvdata2') && !this.source.has('Data/MapInfos.json')) throw Error('ไม่พบ Data/MapInfos.rvdata2 — ไฟล์ที่เลือกไม่ใช่เกม VX Ace (หรือยังขาด Game.rgss3a)');
+      if (!this.source.has('Data/MapInfos.rvdata2') && !this.source.has('Data/MapInfos.json')) throw Error('Data/MapInfos.rvdata2 not found — the selected files are not a VX Ace project (or Game.rgss3a is missing)');
       try { this.maps = await this.data('MapInfos'); } catch (e) { throw Error(`Cannot read Data/MapInfos.rvdata2: ${e.message || e}`); }
       [this.system, this.tilesets, this.actors, this.commonEvents] = await Promise.all([
         this.optional('System', null), this.optional('Tilesets', []), this.optional('Actors', []), this.optional('CommonEvents', [])]);

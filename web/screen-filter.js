@@ -9,11 +9,11 @@
     const gl = output.getContext('webgl', {alpha, antialias: false, depth: false, stencil: false,
       premultipliedAlpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance',
       failIfMajorPerformanceCaveat: !allowSoftware});
-    if (!gl || gl.isContextLost()) throw Error('เบราว์เซอร์ไม่เปิด WebGL ที่เร่งด้วยฮาร์ดแวร์');
+    if (!gl || gl.isContextLost()) throw Error('Hardware-accelerated WebGL is unavailable');
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const device = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
     const software = /swiftshader|llvmpipe|softpipe|software rasterizer|basic render driver|lavapipe/i.test(device);
-    if (software && !allowSoftware) throw Error('เบราว์เซอร์ให้ใช้ได้เฉพาะตัววาดแบบซอฟต์แวร์');
+    if (software && !allowSoftware) throw Error('The browser only supports software rendering');
     return {gl, device, software};
   }
 

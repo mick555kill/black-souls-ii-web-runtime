@@ -15,7 +15,7 @@ const crt = (() => {
     if (factor === 1 && !activeCrt) { w = 0; h = 0; }
     if (reportedW === w && reportedH === h && reportedNotice === notice) return;
     reportedW = w; reportedH = h; reportedNotice = notice;
-    const size = w && h ? 'ภาพที่แสดง ' + w + ' × ' + h + ' พิกเซล' : '';
+    const size = w && h ? 'Output: ' + w + ' × ' + h + ' pixels' : '';
     status.textContent = [size, notice].filter(Boolean).join(' · ');
     status.hidden = !status.textContent;
   }
@@ -82,7 +82,7 @@ const crt = (() => {
       } catch (error) {
         console.warn('Screen filter:', error);
         gpu.configure(false, 1, cssW, cssH, dpr);
-        notice = 'อุปกรณ์นี้ใช้ฟิลเตอร์ที่เลือกไม่ได้ กำลังแสดงภาพต้นฉบับ';
+        notice = 'The selected filter is unavailable on this device. Showing the original image.';
       }
     } else if (factor > 1 || toggle.checked) {
       if (!unavailable) {
@@ -93,12 +93,12 @@ const crt = (() => {
         } catch (error) { console.warn('Screen filter:', error); unavailable = true; closePost(); }
       }
       if (unavailable) {
-        if (factor > 1) { mode = 'canvas'; notice = 'ใช้การปรับขนาดแบบ Canvas 2D'; }
-        if (toggle.checked) notice += (notice ? ' · ' : '') + 'CRT ใช้ไม่ได้บนอุปกรณ์นี้';
+        if (factor > 1) { mode = 'canvas'; notice = 'Using Canvas 2D scaling'; }
+        if (toggle.checked) notice += (notice ? ' · ' : '') + 'CRT is unavailable on this device';
       }
     } else closePost();
     toggle.disabled = !gpu && unavailable && !toggle.checked;
-    toggle.title = toggle.disabled ? 'อุปกรณ์นี้เปิด WebGL ไม่ได้' : '';
+    toggle.title = toggle.disabled ? 'WebGL is unavailable on this device' : '';
     output.hidden = mode !== 'post';
     scaled.hidden = mode !== 'canvas';
     if (scaled.hidden && (scaled.width !== 1 || scaled.height !== 1)) scaled.width = scaled.height = 1;

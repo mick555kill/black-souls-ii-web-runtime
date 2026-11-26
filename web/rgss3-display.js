@@ -154,7 +154,7 @@
       if(!this.gpuEvents){
         this.gpuEvents=true;
         output.addEventListener('webglcontextlost',event=>{
-          event.preventDefault();this.fallbackGpu('การเชื่อมต่อ WebGL หยุดชั่วคราว');this.render();
+          event.preventDefault();this.fallbackGpu('WebGL context lost');this.render();
         });
         output.addEventListener('webglcontextrestored',()=>{if(this.enableGpu(output,options))this.render();});
       }
@@ -162,7 +162,7 @@
       try{
         const {gl,device,software}=root.VX.screenContext(output,true,options.allowSoftware);
         this.gpu=new root.VX.GpuRenderer(output,this,gl);
-        this.gpuMode=software?'WebGL · ซอฟต์แวร์':'WebGL';this.gpuDevice=device;
+        this.gpuMode=software?'WebGL · Software':'WebGL';this.gpuDevice=device;
         this.repaint=true;this.rendererChanged?.();return true;
       }catch(e){this.fallbackGpu(e.message);return false;}
     }
